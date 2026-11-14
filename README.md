@@ -149,7 +149,7 @@ Trình sửa sơ đồ (⋯ › Sửa):
 ### Bước 3. API trên Render (khoảng 5 phút)
 1. [render.com](https://render.com) › đăng nhập bằng GitHub › **New › Blueprint** › chọn repo `FYP`. Render đọc `render.yaml`.
 2. Điền các biến được hỏi: `DB_SECRET`, `GITHUB_DATA_REPO`, `GITHUB_DATA_TOKEN`, `GOOGLE_API_KEY`, `DRIVE_BROWSER_KEY` (tuỳ chọn), `GROQ_API_KEY` (tuỳ chọn), rồi bấm **Apply**.
-3. Đợi deploy xong, mở `https://fyp-api.onrender.com/api/health`. Phải thấy `{"ok":true}`.
+3. Đợi deploy xong, mở `https://fyp-api-bywk.onrender.com/api/health`. Phải thấy `{"ok":true}`.
    Tab Logs có dòng *"Chưa có bản sao lưu — tạo DB mới"* (lần đầu).
 4. Nếu Render đặt địa chỉ khác `fyp-api.onrender.com` (do tên đã có người dùng), sửa 3 chỗ:
    - Biến `PUBLIC_API_ORIGIN` trên Render
@@ -194,7 +194,7 @@ Repo `FYP` › tab **Actions** › bật workflow **keep-alive** (bấm *Run wor
 ### Xử lý lỗi
 | Hiện tượng | Kiểm tra |
 |---|---|
-| Trang mở được nhưng mọi thao tác báo lỗi | `https://fyp-api.onrender.com/api/health`; Render › Logs |
+| Trang mở được nhưng mọi thao tác báo lỗi | `https://fyp-api-bywk.onrender.com/api/health`; Render › Logs |
 | Render log: *"Không tạo được release db"* | Repo `FYP-data` chưa có commit nào: tạo README |
 | Render log: lỗi GitHub 401/403 | Token sai hoặc thiếu quyền Contents: Read and write |
 | Render log: lỗi giải mã khi khởi động | `DB_SECRET` khác lúc lưu: đặt lại đúng chuỗi cũ |

@@ -14,7 +14,7 @@ services:
       - key: HOST
         value: 0.0.0.0
       - key: PUBLIC_API_ORIGIN       # địa chỉ của chính service này
-        value: https://fyp-api.onrender.com
+        value: https://fyp-api-bywk.onrender.com
       - key: DB_SECRET               # chuỗi ngẫu nhiên dài — CẤT GIỮ, mất là không giải mã được bản sao lưu
         sync: false
       - key: GITHUB_DATA_REPO        # VD: hugostudiodev-tech/FYP-data (private)
