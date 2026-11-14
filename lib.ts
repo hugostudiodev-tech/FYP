@@ -50,15 +50,6 @@ export function splitByHeadings(md: string): Section[] {
   });
 }
 
-// "bytes=100-" → {start, end}; null nếu không có/không hợp lệ.
-export function parseRange(header: string | undefined, size: number): { start: number; end: number } | null {
-  const m = /^bytes=(\d*)-(\d*)$/.exec(header || '');
-  if (!m || (!m[1] && !m[2])) return null;
-  const start = Math.max(0, m[1] ? Number(m[1]) : size - Number(m[2]));
-  const end = Math.min(m[1] && m[2] ? Number(m[2]) : size - 1, size - 1);
-  return start <= end ? { start, end } : null;
-}
-
 // Chuẩn hoá anchor từ client (dữ liệu không tin cậy).
 export function cleanAnchor(a: any): Anchor {
   const s = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');

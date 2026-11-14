@@ -168,7 +168,7 @@ function renderVideo() {
   $('#videoEmpty').hidden = has;
   if (!has) {
     $('#videoEmpty').innerHTML = isOwner()
-      ? `${ic('video')}<h3>Chưa có video demo</h3><p>Xem hướng dẫn quay, rồi dán link folder Google Drive hoặc tải video lên.</p>
+      ? `${ic('video')}<h3>Chưa có video demo</h3><p>Xem hướng dẫn quay, đưa video vào một folder Google Drive của bạn rồi dán link folder.</p>
          <div class="row" style="justify-content:center"><button id="eGuide">${ic('help')}Hướng dẫn quay</button>
          <button class="primary" id="eAdd">${ic('plus')}Thêm video</button></div>`
       : `${ic('video')}<h3>Sinh viên chưa đăng video</h3>`;
@@ -209,7 +209,7 @@ function renderCoverage() {
   const scanned = project.videos.some((v) => v.aiState === 'done');
   const item = (cls, icon, title, sub, btn) => `<li class="cov-item ${cls}"><span class="st">${ic(icon)}</span>
     <span><b>${esc(title)}</b><small>${esc(sub)}</small></span>${btn}</li>`;
-  const redo = (sid, label) => `<button data-shot="${esc(sid)}">${ic('upload')}<span class="hide-sm">${label}</span></button>`;
+  const redo = (sid, label) => `<button data-shot="${esc(sid)}">${ic('cloud')}<span class="hide-sm">${label}</span></button>`;
   $('#coverage').innerHTML = `
     <div class="cov-head"><b>Yêu cầu video</b><div class="cov-bar"><div style="width:${sb.pct}%"></div></div>
       <span class="pct">${ok.length}/${total} đạt · ${sb.pct}%</span></div>
@@ -528,53 +528,30 @@ $('#rotateBtn').onclick = run(async () => {
   toast('Đã tạo link mới');
 });
 
-// ============ Popup: thêm video (Drive / tải lên), quay bổ sung ============
-let addTarget = null;
+// ============ Popup: thêm video từ Google Drive (hệ thống không lưu video) ============
 function openAdd(shot = null) {
-  addTarget = shot;
-  $('#hAdd').textContent = shot ? 'Quay bổ sung' : 'Thêm video';
+  $('#hAdd').textContent = shot ? 'Quay bổ sung' : 'Thêm video từ Google Drive';
   $('#addFor').hidden = !shot;
-  if (shot) $('#addFor').innerHTML = `<b>${esc(shot.title)}</b><br><span class="small">${esc(shot.desc)} Gợi ý: nói "Cảnh: ${esc(shot.title)}" ở đầu video.</span>`;
-  $('#upProgress').hidden = true;
-  $('#driveUrl').value = '';
+  if (shot) {
+    $('#addFor').innerHTML = `<b>${esc(shot.title)}</b><br><span class="small">${esc(shot.desc)} Gợi ý: nói "Cảnh: ${esc(shot.title)}" ở đầu video.
+      ${project.driveFolder ? '<br><b>Chỉ cần bỏ video mới vào folder Drive đã dán trước đó</b> — mở lại trang này là hệ thống tự thêm và tự quét.' : ''}</span>`;
+  }
+  $('#driveUrl').value = project.driveFolder ? `https://drive.google.com/drive/folders/${project.driveFolder}` : '';
   $('#dlgAdd').showModal();
 }
 $('#addVideoBtn').onclick = () => openAdd();
-document.querySelectorAll('[data-src]').forEach((t) => (t.onclick = () => {
-  document.querySelectorAll('[data-src]').forEach((x) => x.setAttribute('aria-selected', x === t));
-  document.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== t.dataset.src));
-}));
 $('#driveBtn').onclick = run(() => busy($('#driveBtn'), '', async () => {
   const r = await api('/drive', 'POST', { url: $('#driveUrl').value });
   $('#dlgAdd').close();
   await reload();
-  toast(`Đã thêm ${r.videos} video${r.report ? ` và báo cáo "${r.report}"` : ''}. Đang tự quét…`);
+  toast(r.videos || r.report ? `Đã thêm ${r.videos} video${r.report ? ` và báo cáo "${r.report}"` : ''}. Đang tự quét…` : 'Không có video mới trong link này');
 }));
-function upload(url, file, label) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', `/api/projects/${pid}${url}`);
-    xhr.setRequestHeader('x-filename', encodeURIComponent(file.name));
-    xhr.upload.onprogress = (e) => { $('#upBar').value = e.loaded / e.total; $('#upText').textContent = `${label} · ${Math.round((e.loaded / e.total) * 100)}%`; };
-    xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(JSON.parse(xhr.responseText).error)));
-    xhr.onerror = () => reject(new Error('Mất kết nối khi tải ' + file.name));
-    xhr.send(file);
-  });
+// Mở trang → tự đồng bộ folder Drive đã dán: video mới bỏ vào folder được thêm và quét tự động.
+async function syncDrive() {
+  if (!isOwner() || !project.driveFolder) return;
+  const r = await api('/drive-sync', 'POST', {});
+  if (r.videos) { await reload(); toast(`Phát hiện ${r.videos} video mới trong folder Drive — đang tự quét`); }
 }
-async function uploadVideos(files) {
-  files = [...files].filter((f) => /\.(mp4|webm|mov|m4v)$/i.test(f.name));
-  if (!files.length) return toast('Chỉ nhận MP4/WebM/MOV', 'err');
-  $('#upProgress').hidden = false;
-  for (const [i, f] of files.entries()) await upload('/videos', f, `Video ${i + 1}/${files.length}: ${f.name}`);
-  $('#dlgAdd').close();
-  await reload();
-  toast(`Đã tải ${files.length} video. Đang tự quét…`);
-}
-$('#fileInput').onchange = run(async () => { await uploadVideos($('#fileInput').files); $('#fileInput').value = ''; });
-const drop = $('#drop');
-drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
-drop.ondragleave = () => drop.classList.remove('over');
-drop.ondrop = run(async (e) => { e.preventDefault(); drop.classList.remove('over'); await uploadVideos(e.dataTransfer.files); });
 
 // ============ Popup: hướng dẫn quay ============
 function openGuide() {
@@ -753,7 +730,7 @@ $('#moreBtn').onclick = (e) => openMenu(e.currentTarget, [
   }) },
 ]);
 $('#reportMore').onclick = (e) => openMenu(e.currentTarget, [
-  { icon: 'upload', label: project.hasReport ? 'Tải báo cáo mới' : 'Tải báo cáo', hint: 'PDF/MD/TXT — AI tách phần, tạo bảng & sơ đồ', onClick: () => $('#reportInput').click() },
+  { icon: 'upload', label: project.hasReport ? 'Tải báo cáo mới' : 'Tải báo cáo', hint: 'PDF/Word/MD ≤ 4MB — lớn hơn thì dán link Drive', onClick: () => $('#reportInput').click() },
   { icon: 'diagram', label: 'Tạo thêm sơ đồ & bảng', onClick: run(aiDiagrams) },
 ]);
 $('#addSectionBtn').onclick = run(addSection);
@@ -762,16 +739,14 @@ $('#reportInput').onchange = run(async () => {
   $('#reportInput').value = '';
   if (!f) return;
   if (project.hasReport && !(await confirmBox('Thay báo cáo cũ?', 'Các phần hiện tại (kể cả phần đã sửa tay) sẽ được AI tạo lại từ báo cáo mới.', { ok: 'Thay báo cáo' }))) return;
-  toast('Đang tải báo cáo…');
   const file = /\.docx$/i.test(f.name) ? await docxToHtml(f) : f;
-  await new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', `/api/projects/${pid}/report`);
-    xhr.setRequestHeader('x-filename', encodeURIComponent(file.name));
-    xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(JSON.parse(xhr.responseText).error)));
-    xhr.onerror = () => reject(new Error('Mất kết nối'));
-    xhr.send(file);
-  });
+  if (file.size > project.maxReportMb * 1024 ** 2) {
+    return toast(`Báo cáo lớn hơn ${project.maxReportMb}MB — hãy đưa file lên Google Drive rồi dán link ở "Thêm video từ Google Drive"`, 'err');
+  }
+  toast('Đang gửi báo cáo cho AI đọc…');
+  // Báo cáo chỉ được đọc để AI tách phần, hệ thống không lưu file gốc.
+  const r = await fetch(`/api/projects/${pid}/report`, { method: 'POST', headers: { 'x-filename': encodeURIComponent(file.name) }, body: file });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Gửi báo cáo lỗi (${r.status})`);
   await reload();
 });
 
@@ -815,6 +790,7 @@ async function reload() {
   const deep = location.hash.match(/^#c=(.+)/);
   const c = deep && comments.find((x) => x.id === deep[1]);
   if (c) jumpTo(c);
+  syncDrive().catch(() => {});
   if (!isOwner()) {
     api('/evaluations').then((r) => renderRateState(r.mine?.total, r.mine?.published, r.mine?.band)).catch(() => {});
     if (!seen('lecGuideSeen')) { $('#dlgLecGuide').showModal(); mark('lecGuideSeen'); }

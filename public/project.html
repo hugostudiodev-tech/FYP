@@ -104,25 +104,17 @@
 </dialog>
 
 <dialog id="dlgAdd" aria-labelledby="hAdd">
-  <div class="dlg-head"><h2 id="hAdd">Thêm video</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-head"><h2 id="hAdd">Thêm video từ Google Drive</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
   <div class="dlg-body">
     <div id="addFor" class="statusbar" hidden style="margin-bottom:14px;display:block"></div>
-    <div class="seg" role="tablist" style="display:flex">
-      <button type="button" role="tab" data-src="drive" aria-selected="true" style="flex:1"><i data-i="cloud"></i>Google Drive</button>
-      <button type="button" role="tab" data-src="upload" aria-selected="false" style="flex:1"><i data-i="upload"></i>Tải từ máy</button>
-    </div>
-    <div data-pane="drive">
-      <label for="driveUrl">Link file hoặc folder</label>
-      <div class="row"><input id="driveUrl" placeholder="https://drive.google.com/drive/folders/…"><button class="primary" id="driveBtn">Thêm</button></div>
-      <p class="hint">Share "Bất kỳ ai có đường liên kết". Dán link folder: mọi video trong folder được thêm theo thứ tự tên file.</p>
-    </div>
-    <div data-pane="upload" hidden>
-      <label class="dropzone" id="drop" for="fileInput" style="margin-top:14px">
-        <i data-i="upload"></i><b>Kéo thả video vào đây hoặc bấm để chọn</b><span class="small">MP4/WebM/MOV, tối đa 2GB mỗi file, chọn được nhiều file</span>
-      </label>
-      <input id="fileInput" type="file" accept="video/mp4,video/webm,video/quicktime,.m4v" multiple hidden>
-      <div id="upProgress" hidden style="margin-top:12px"><div class="small muted" id="upText"></div><progress id="upBar" max="1" value="0"></progress></div>
-    </div>
+    <p class="muted small" style="margin:0">Video luôn nằm trên <b>Google Drive của bạn</b>; hệ thống chỉ đọc để phát và để AI quét, không lưu bản sao.</p>
+    <ol class="small" style="padding-left:18px;margin:10px 0 0">
+      <li>Tạo một folder trên Drive, bỏ toàn bộ video (và báo cáo PDF / Google Docs nếu muốn) vào đó.</li>
+      <li>Chuột phải folder › <b>Chia sẻ</b> › Quyền truy cập chung: <b>Bất kỳ ai có đường liên kết</b> (Người xem) › <b>Sao chép đường liên kết</b>.</li>
+      <li>Dán vào ô dưới. Về sau chỉ cần bỏ video mới vào folder — mở trang dự án là hệ thống tự thêm và tự quét.</li>
+    </ol>
+    <label for="driveUrl">Link folder (hoặc link 1 file video)</label>
+    <div class="row"><input id="driveUrl" placeholder="https://drive.google.com/drive/folders/…"><button class="primary" id="driveBtn">Thêm</button></div>
   </div>
 </dialog>
 
@@ -145,11 +137,12 @@
       <li>Làm trọn vẹn một luồng (nhập → lưu → thấy kết quả), không cắt giữa chừng.</li>
       <li>Nên quay thêm một lần nhập sai hoặc thiếu dữ liệu để thấy hệ thống báo lỗi.</li>
     </ul>
-    <h3>3. Đặt tên và đưa lên</h3>
+    <h3>3. Đặt tên và đưa lên Google Drive (bắt buộc)</h3>
     <ul>
+      <li>Hệ thống <b>không lưu video</b>: mọi video nằm trên Google Drive cá nhân của bạn.</li>
       <li>Đặt tên theo thứ tự: <code>01_gioi-thieu.mp4</code>, <code>02_kien-truc.mp4</code>, …</li>
-      <li>Cách nhanh nhất: bỏ tất cả vào <b>một folder Google Drive</b>, share "Bất kỳ ai có link", dán link folder một lần.</li>
-      <li>Hoặc tải trực tiếp từ máy (≤ 2GB mỗi file).</li>
+      <li>Bỏ tất cả vào <b>một folder</b>, chia sẻ "Bất kỳ ai có đường liên kết" (Người xem), rồi dán link folder <b>một lần</b>.</li>
+      <li>Quay thêm hoặc quay lại cảnh nào thì bỏ file mới vào cùng folder; mở trang dự án là hệ thống tự thêm và tự quét. Không xoá video cũ khi đang được chấm.</li>
     </ul>
     <h3>4. Sau khi đưa lên</h3>
     <p>Hệ thống tự quét từng video và chấm từng cảnh. Cảnh <b>thiếu</b> hoặc <b>chưa rõ</b> có nút <b>Quay bổ sung</b>: quay riêng đoạn đó và gửi lên,

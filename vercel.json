@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo 'static site — không cần cài'",
+  "buildCommand": "echo 'static site — không cần build'",
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://fyp-api.onrender.com/api/:path*" }
+  ]
+}

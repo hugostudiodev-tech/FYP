@@ -1,0 +1,29 @@
+# Render Blueprint: New › Blueprint › chọn repo này. Biến "sync: false" sẽ được hỏi khi tạo.
+services:
+  - type: web
+    name: fyp-api
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.ts
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: HOST
+        value: 0.0.0.0
+      - key: PUBLIC_API_ORIGIN       # địa chỉ của chính service này
+        value: https://fyp-api.onrender.com
+      - key: DB_SECRET               # chuỗi ngẫu nhiên dài — CẤT GIỮ, mất là không giải mã được bản sao lưu
+        sync: false
+      - key: GITHUB_DATA_REPO        # VD: hugostudiodev-tech/FYP-data (private)
+        sync: false
+      - key: GITHUB_DATA_TOKEN       # fine-grained token, Contents: Read and write cho repo trên
+        sync: false
+      - key: GOOGLE_API_KEY          # đọc Google Drive (bắt buộc để dán link video)
+        sync: false
+      - key: DRIVE_BROWSER_KEY       # tuỳ chọn: phát video thẳng từ Google, đỡ băng thông Render
+        sync: false
+      - key: GROQ_API_KEY            # tuỳ chọn: AI chữ dự phòng
+        sync: false

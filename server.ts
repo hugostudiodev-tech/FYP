@@ -1,5 +1,6 @@
-// Demo Review — server: Node stdlib (http + node:sqlite + fetch). Không dependency runtime.
+// Demo Review — API server: Node stdlib (http + node:sqlite + fetch) + SDK Claude.
 // Sinh viên: tài khoản bằng MSSV, CRUD bài trình bày. Giảng viên: không tài khoản, vào bằng link review bí mật.
+// Hệ thống KHÔNG lưu file: video nằm trên Google Drive của sinh viên, báo cáo chỉ đọc 1 lần để AI tách phần.
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,20 +8,23 @@ import crypto from 'node:crypto';
 import https from 'node:https';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
+import * as dbsync from './dbsync.ts';
 import {
-  splitByHeadings, parseRange, cleanAnchor, driveRef, validateStudent, normMssv, parseCookies, KINDS, KIND_TITLE,
+  splitByHeadings, cleanAnchor, driveRef, validateStudent, normMssv, parseCookies, KINDS, KIND_TITLE,
   checklistMissing, mergeMissing, storyboard, DEFAULT_SHOTS, RUBRIC, rubricTotal, UK_BANDS, ukBand, type Section, type Missing, type Shot, type Coverage,
 } from './lib.ts';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
-const UPLOADS = path.join(ROOT, 'uploads');
 const PORT = Number(process.env.PORT) || 3000;
-const HOST = process.env.HOST || '127.0.0.1'; // chỉ nghe nội bộ; Caddy đứng trước lo HTTPS (Docker thì đặt HOST=0.0.0.0)
+const HOST = process.env.HOST || '127.0.0.1'; // local: chỉ nghe nội bộ. Render: HOST=0.0.0.0
+// Video Drive: có khoá trình duyệt (giới hạn theo tên miền) thì trình duyệt tải thẳng từ Google, server không tốn băng thông;
+// không có thì đi qua /drive/<id> của server.
+const DRIVE_BROWSER_KEY = process.env.DRIVE_BROWSER_KEY || '';
+const API_ORIGIN = (process.env.PUBLIC_API_ORIGIN || '').replace(/\/$/, ''); // VD: https://fyp-api.onrender.com
 const GKEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || ''; // 1 key cho cả Gemini + Drive
 const DRIVE = 'https://www.googleapis.com/drive/v3/files';
 // Thử Flash trước (tốt hơn), hết lượt miễn phí thì xuống Flash-Lite (quota/ngày lớn hơn nhiều).
@@ -40,14 +44,23 @@ const PROVIDERS: Record<string, { name: string; base: string; model: string; jso
 type ProviderCfg = { id: string; key: string; model: string };
 // Khoá chung của server (tuỳ chọn) làm dự phòng sau khoá của sinh viên.
 const GROQ_KEY = process.env.GROQ_API_KEY || '';
-const MAX_UPLOAD = 2 * 1024 ** 3;
 const MAX_INLINE_PDF = 18 * 1024 ** 2; // Gemini nhận inline ~20MB/request
-const VIDEO_EXT = ['.mp4', '.webm', '.mov', '.m4v'];
+// Báo cáo gửi qua Vercel (giới hạn body ~4,5MB) → mặc định 4MB; PDF lớn hơn thì dán link Drive.
+const MAX_REPORT = (Number(process.env.MAX_REPORT_MB) || 4) * 1024 ** 2;
 const REPORT_EXT = ['.pdf', '.md', '.txt', '.html']; // .docx được trình duyệt đổi sang .html (mammoth)
 const SESSION_DAYS = 30;
-fs.mkdirSync(UPLOADS, { recursive: true });
 
-const db = new DatabaseSync(path.join(ROOT, 'data.db'));
+// ---- Database: SQLite trong 1 file; trên Render khôi phục từ GitHub khi khởi động (xem dbsync.ts) ----
+const DB_FILE = path.join(process.env.DATA_DIR || ROOT, 'data.db');
+if (dbsync.enabled) {
+  const saved = await dbsync.restore(); // lỗi → dừng hẳn, KHÔNG chạy với DB rỗng rồi ghi đè bản sao lưu
+  if (saved) {
+    for (const f of [DB_FILE, DB_FILE + '-wal', DB_FILE + '-shm']) fs.rmSync(f, { force: true });
+    fs.writeFileSync(DB_FILE, saved);
+  }
+  console.log(saved ? `Đã khôi phục DB từ GitHub (${saved.length} byte)` : 'Chưa có bản sao lưu — tạo DB mới');
+}
+const db = new DatabaseSync(DB_FILE);
 function q0(sql: string, ...args: any[]) { db.prepare(sql).run(...args); }
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -73,6 +86,7 @@ for (const sql of ["ALTER TABLE projects ADD COLUMN missing TEXT NOT NULL DEFAUL
   "ALTER TABLE students ADD COLUMN gemini_key TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE students ADD COLUMN ai_providers TEXT NOT NULL DEFAULT '[]'",
   "ALTER TABLE projects ADD COLUMN rubric_ai TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE projects ADD COLUMN drive_folder TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE projects ADD COLUMN brief TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE comments ADD COLUMN author_key TEXT NOT NULL DEFAULT ''"]) try { db.exec(sql); } catch {}
 // Theo dõi lượt gọi & token AI theo ngày để sinh viên biết mình dùng bao nhiêu.
@@ -110,19 +124,20 @@ async function readJson(req: IncomingMessage): Promise<any> {
   return JSON.parse(raw || '{}');
 }
 
-// Stream body thẳng xuống đĩa (không buffer video vào RAM).
-async function saveUpload(req: IncomingMessage, allowed: string[]): Promise<string> {
-  const ext = path.extname(str(decodeURIComponent(String(req.headers['x-filename'] || '')), 200)).toLowerCase();
-  if (!allowed.includes(ext)) throw new HttpError(400, `Chỉ nhận: ${allowed.join(', ')}`);
-  if (Number(req.headers['content-length']) > MAX_UPLOAD) throw new HttpError(413, 'File quá 2GB');
-  const file = crypto.randomUUID() + ext;
-  await pipeline(req, fs.createWriteStream(path.join(UPLOADS, file)));
-  return file;
+// Đọc file báo cáo vào RAM (nhỏ, có giới hạn) — không ghi xuống đĩa.
+async function readReport(req: IncomingMessage): Promise<{ name: string; ext: string; buf: Buffer }> {
+  const name = str(decodeURIComponent(String(req.headers['x-filename'] || '')), 200);
+  const ext = path.extname(name).toLowerCase();
+  if (!REPORT_EXT.includes(ext)) throw new HttpError(400, `Chỉ nhận: ${REPORT_EXT.join(', ')} (và .docx)`);
+  const chunks: Buffer[] = [];
+  let n = 0;
+  for await (const c of req) {
+    n += c.length;
+    if (n > MAX_REPORT) throw new HttpError(413, `Báo cáo lớn hơn ${MAX_REPORT / 1024 ** 2}MB — hãy đưa lên Google Drive rồi dán link`);
+    chunks.push(c);
+  }
+  return { name, ext, buf: Buffer.concat(chunks) };
 }
-
-const removeUpload = (file: string | null) => {
-  if (file && !file.startsWith('drive:')) fs.rm(path.join(UPLOADS, path.basename(file)), { force: true }, () => {});
-};
 
 // ---- Phiên đăng nhập (cookie HttpOnly) ----
 function sessionCookie(req: IncomingMessage, value: string, maxAge: number) {
@@ -199,10 +214,10 @@ const PROMPT =
   '(kiến trúc, ERD, sequence cho luồng chính, gantt cho kế hoạch, use case), ghi "*(AI đề xuất từ nội dung báo cáo)*" ở đầu markdown của chúng. ' +
   DIAGRAM_GUIDE + ' Các phần không phải sơ đồ để mermaid là chuỗi rỗng. ' + MISSING_GUIDE;
 
-async function extractWithGemini(full: string, isPdf: boolean, pid: string, key: string): Promise<{ sections: Section[]; missing: any[] }> {
+async function extractWithGemini(buf: Buffer, isPdf: boolean, pid: string, key: string): Promise<{ sections: Section[]; missing: any[] }> {
   const parts: any[] = isPdf
-    ? [{ inline_data: { mime_type: 'application/pdf', data: fs.readFileSync(full).toString('base64') } }]
-    : [{ text: fs.readFileSync(full, 'utf8') }];
+    ? [{ inline_data: { mime_type: 'application/pdf', data: buf.toString('base64') } }]
+    : [{ text: compact(buf.toString('utf8')) }];
   parts.push({ text: PROMPT });
   return gemini(parts, SECTION_SCHEMA, {}, pid, key);
 }
@@ -483,25 +498,25 @@ async function aiFixMermaid(pid: string, code: string, error: string) {
   return { code: String(r.code || '').replace(/^```(mermaid)?\n?|```$/g, '').trim(), explain: str(r.explain, 500) };
 }
 
-async function processReport(projectId: string, file: string) {
-  const full = path.join(UPLOADS, file);
-  const isPdf = file.endsWith('.pdf');
+async function processReport(projectId: string, buf: Buffer, ext: string) {
+  const isPdf = ext === '.pdf';
+  const text = () => buf.toString('utf8');
   let sections: Section[] = [], missing: Missing[] = [], status = '';
   const key = keyFor(projectId);
   try {
     if (!key) {
       if (isPdf) status = 'Chưa có khoá AI nên chưa đọc được PDF. Thêm khoá ở Tài khoản › Khoá AI rồi tải lại, hoặc tự thêm các phần.';
-      else { sections = toSections(splitByHeadings(fs.readFileSync(full, 'utf8'))); status = 'Chưa có AI: đã tách theo heading (#).'; }
-    } else if (isPdf && fs.statSync(full).size > MAX_INLINE_PDF) {
+      else { sections = toSections(splitByHeadings(text())); status = 'Chưa có AI: đã tách theo heading (#).'; }
+    } else if (isPdf && buf.length > MAX_INLINE_PDF) {
       status = 'PDF lớn hơn 18MB: hãy nén PDF (giảm chất lượng ảnh) rồi tải lại.';
     } else {
-      const r = await extractWithGemini(full, isPdf, projectId, key);
+      const r = await extractWithGemini(buf, isPdf, projectId, key);
       sections = toSections(r.sections);
       missing = toMissing(r.missing);
     }
   } catch (e) {
     console.error(e);
-    if (!isPdf) sections = toSections(splitByHeadings(fs.readFileSync(full, 'utf8')));
+    if (!isPdf) sections = toSections(splitByHeadings(text()));
     status = 'AI lỗi: ' + (e as Error).message;
   }
   updateProject(projectId, (p) => { p.sections = sections; p.missing = missing; }); // báo cáo mới thay toàn bộ
@@ -574,18 +589,12 @@ async function analyzeVideo(pid: string, v: any, job: Job) {
   let geminiFile = '';
   const key = keyFor(pid); // upload và hỏi phải cùng 1 key (file thuộc project của key đó)
   try {
-    // 1. Lấy luồng dữ liệu video (Drive hoặc file trên server)
-    let stream: Readable, size: number, mime: string;
-    if (v.file.startsWith('drive:')) {
-      const fid = v.file.slice(6);
-      const meta = await driveJson(`/${fid}?fields=size,mimeType`);
-      const r = await fetch(`${DRIVE}/${fid}?alt=media&supportsAllDrives=true&key=${GKEY}`);
-      if (!r.ok || !r.body) throw new Error('Không tải được video từ Drive');
-      stream = Readable.fromWeb(r.body as any); size = Number(meta.size); mime = meta.mimeType;
-    } else {
-      const full = path.join(UPLOADS, v.file);
-      stream = fs.createReadStream(full); size = fs.statSync(full).size; mime = TYPES[path.extname(full)] || 'video/mp4';
-    }
+    // 1. Đọc video thẳng từ Google Drive (stream, không lưu lại)
+    const fid = v.file.slice(6);
+    const meta = await driveJson(`/${fid}?fields=size,mimeType`);
+    const dl = await fetch(`${DRIVE}/${fid}?alt=media&supportsAllDrives=true&key=${GKEY}`);
+    if (!dl.ok || !dl.body) throw new Error('Không tải được video từ Drive');
+    const stream = Readable.fromWeb(dl.body as any), size = Number(meta.size), mime = meta.mimeType;
     // 2. Upload resumable — % thật theo số byte đã gửi
     cur.stage = 'Gửi video cho AI';
     const start = await fetch(`${GEMINI_FILES}/upload/v1beta/files`, { method: 'POST', headers: {
@@ -681,21 +690,28 @@ async function addFromDrive(pid: string, link: string) {
     ? (await driveJson(`?q=${encodeURIComponent(`'${ref.id}' in parents and trashed=false`)}` +
         `&orderBy=name&pageSize=1000&includeItemsFromAllDrives=true&fields=files(${fields})`)).files
     : [await driveJson(`/${ref.id}?fields=${fields}`)];
+  if (ref.kind === 'folder') q('UPDATE projects SET drive_folder = ? WHERE id = ?').run(ref.id, pid); // để tự đồng bộ về sau
+  const have = new Set((q('SELECT file FROM videos WHERE project_id = ?').all(pid) as any[]).map((v) => v.file));
   let report = '';
   const added: string[] = [];
   let pos = nextPos(pid);
   for (const f of files) {
+    if (have.has('drive:' + f.id)) continue; // đã có → bỏ qua (dán lại folder không bị trùng)
     if (f.mimeType.startsWith('video/')) {
       const vid = id();
       q('INSERT INTO videos (id, project_id, name, file, pos) VALUES (?, ?, ?, ?, ?)')
         .run(vid, pid, f.name.replace(/\.[^.]+$/, ''), 'drive:' + f.id, pos++);
       added.push(vid);
-    } else if (!report && (f.mimeType === 'application/pdf' || /\.(md|txt)$/i.test(f.name))) {
-      const r = await fetch(`${DRIVE}/${f.id}?alt=media&supportsAllDrives=true&key=${GKEY}`);
-      if (!r.ok || !r.body) throw new HttpError(400, 'Không tải được báo cáo từ Drive: ' + f.name);
-      const file = crypto.randomUUID() + (f.mimeType === 'application/pdf' ? '.pdf' : path.extname(f.name).toLowerCase());
-      await pipeline(Readable.fromWeb(r.body as any), fs.createWriteStream(path.join(UPLOADS, file)));
-      setReport(pid, file);
+    } else if (!report && ref.kind === 'file' || !report && !(q('SELECT report FROM projects WHERE id = ?').get(pid) as any).report) {
+      // Báo cáo: PDF/MD/TXT, hoặc Google Docs (xuất ra PDF). Folder chỉ lấy báo cáo khi dự án chưa có.
+      const gdoc = f.mimeType === 'application/vnd.google-apps.document';
+      if (!gdoc && f.mimeType !== 'application/pdf' && !/\.(md|txt)$/i.test(f.name)) continue;
+      const r = await fetch(gdoc ? `${DRIVE}/${f.id}/export?mimeType=application/pdf&key=${GKEY}`
+        : `${DRIVE}/${f.id}?alt=media&supportsAllDrives=true&key=${GKEY}`);
+      if (!r.ok) throw new HttpError(400, 'Không tải được báo cáo từ Drive: ' + f.name);
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length > MAX_INLINE_PDF) throw new HttpError(413, `Báo cáo "${f.name}" lớn hơn 18MB — hãy nén PDF rồi thử lại`);
+      setReport(pid, f.name, buf, gdoc || f.mimeType === 'application/pdf' ? '.pdf' : path.extname(f.name).toLowerCase());
       report = f.name;
     }
   }
@@ -703,11 +719,9 @@ async function addFromDrive(pid: string, link: string) {
   return { videos: added.length, report };
 }
 
-function setReport(pid: string, file: string) {
-  const old = q('SELECT report FROM projects WHERE id = ?').get(pid) as { report: string | null };
-  removeUpload(old.report);
-  q("UPDATE projects SET report = ?, status = 'AI đang đọc báo cáo…' WHERE id = ?").run(file, pid);
-  processReport(pid, file); // chạy nền, trang project tự poll status
+function setReport(pid: string, name: string, buf: Buffer, ext: string) {
+  q("UPDATE projects SET report = ?, status = 'AI đang đọc báo cáo…' WHERE id = ?").run(name, pid);
+  processReport(pid, buf, ext); // chạy nền, trang project tự poll status
 }
 
 const nextPos = (pid: string) =>
@@ -732,25 +746,16 @@ async function proxyDrive(req: IncomingMessage, res: ServerResponse, fileId: str
 }
 
 // ---- Static + video có hỗ trợ Range ----
-const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
-  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
-  '.pdf': 'application/pdf', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
+const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css' };
 
-// ponytail: file upload phục vụ công khai theo tên UUID (không đoán được); thêm kiểm tra quyền nếu cần chặn chia sẻ link file.
-function serveFile(req: IncomingMessage, res: ServerResponse, base: string, rel: string) {
-  const full = path.join(base, path.normalize(rel));
-  if (!full.startsWith(base + path.sep)) return send(res, 403, { error: 'forbidden' });
-  fs.stat(full, (err, st) => {
-    if (err || !st.isFile()) return send(res, 404, { error: 'not found' });
-    const headers = { 'content-type': TYPES[path.extname(full)] || 'application/octet-stream', 'accept-ranges': 'bytes' };
-    const range = parseRange(req.headers.range, st.size);
-    if (range) {
-      res.writeHead(206, { ...headers, 'content-range': `bytes ${range.start}-${range.end}/${st.size}`,
-        'content-length': range.end - range.start + 1 });
-      return fs.createReadStream(full, range).pipe(res);
-    }
-    res.writeHead(200, { ...headers, 'content-length': st.size });
-    fs.createReadStream(full).pipe(res);
+// File tĩnh khi chạy local (production: Vercel phục vụ thư mục public/).
+function serveFile(res: ServerResponse, rel: string) {
+  const full = path.join(PUBLIC, path.normalize(rel));
+  if (!full.startsWith(PUBLIC + path.sep)) return send(res, 403, { error: 'forbidden' });
+  fs.readFile(full, (err, data) => {
+    if (err) return send(res, 404, { error: 'not found' });
+    res.writeHead(200, { 'content-type': TYPES[path.extname(full)] || 'application/octet-stream' });
+    res.end(data);
   });
 }
 
@@ -759,7 +764,8 @@ function projectView(proj: any, role: 'owner' | 'lecturer') {
   const videos = q('SELECT * FROM videos WHERE project_id = ? ORDER BY pos').all(proj.id).map((v: any) => ({
     id: v.id, name: v.name, chapters: JSON.parse(v.chapters), summary: v.summary,
     coverage: JSON.parse(v.coverage) as Coverage[], aiState: role === 'owner' ? v.ai_state : undefined,
-    src: v.file.startsWith('drive:') ? '/drive/' + v.file.slice(6) : '/uploads/' + v.file }));
+    src: DRIVE_BROWSER_KEY ? `${DRIVE}/${v.file.slice(6)}?alt=media&supportsAllDrives=true&key=${DRIVE_BROWSER_KEY}`
+      : `${API_ORIGIN}/drive/${v.file.slice(6)}` }));
   const shots = shotsOf(proj);
   const sb = storyboard(shots, videos);
   return {
@@ -775,6 +781,8 @@ function projectView(proj: any, role: 'owner' | 'lecturer') {
     // Thông tin còn thiếu: khung bắt buộc (tính lại theo nội dung hiện tại) + câu hỏi AI rút ra.
     missing: role === 'owner' ? [...checklistMissing(JSON.parse(proj.sections)), ...JSON.parse(proj.missing)] : undefined,
     reviewToken: role === 'owner' ? proj.review_token : undefined,
+    driveFolder: role === 'owner' ? proj.drive_folder || '' : undefined,
+    maxReportMb: MAX_REPORT / 1024 ** 2,
   };
 }
 
@@ -785,9 +793,9 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 
   if (p[0] !== 'api') {
     if (p[0] === 'drive' && p[1]) return proxyDrive(req, res, p[1]);
-    if (p[0] === 'uploads') return serveFile(req, res, UPLOADS, p.slice(1).join('/'));
-    return serveFile(req, res, PUBLIC, p.length ? p.join('/') : 'index.html');
+    return serveFile(res, p.length ? p.join('/') : 'index.html');
   }
+  if (p[1] === 'health') return send(res, 200, { ok: true }); // Render health check + ping giữ server thức
 
   // --- Tài khoản sinh viên ---
   // Đăng nhập chỉ bằng MSSV — quyết định thiết kế (đơn giản cho sinh viên), không mật khẩu/OTP.
@@ -906,8 +914,6 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       return send(res, 200, { ok: true });
     }
     if (m === 'DELETE') {
-      for (const v of q('SELECT file FROM videos WHERE project_id = ?').all(pid) as any[]) removeUpload(v.file);
-      removeUpload(proj.report);
       q('DELETE FROM projects WHERE id = ?').run(pid);
       return send(res, 200, { ok: true });
     }
@@ -924,14 +930,6 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   // --- Video ---
   if (sub === 'videos') {
     ownerOnly();
-    if (m === 'PUT' && !subId) {
-      const file = await saveUpload(req, VIDEO_EXT);
-      const name = str(decodeURIComponent(String(req.headers['x-filename'] || '')), 200).replace(/\.[^.]+$/, '');
-      const vid = id();
-      q('INSERT INTO videos (id, project_id, name, file, pos) VALUES (?, ?, ?, ?, ?)').run(vid, pid, name, file, nextPos(pid));
-      enqueueVideos(pid, [vid]); // tự quét ngay
-      return send(res, 201, { id: vid });
-    }
     const v: any = subId && q('SELECT * FROM videos WHERE id = ? AND project_id = ?').get(subId, pid);
     if (!v) throw new HttpError(404, 'Không tìm thấy video');
     if (m === 'PATCH') {
@@ -948,7 +946,6 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       return send(res, 200, { ok: true });
     }
     if (m === 'DELETE') {
-      removeUpload(v.file);
       q('DELETE FROM videos WHERE id = ?').run(v.id);
       return send(res, 200, { ok: true });
     }
@@ -959,9 +956,17 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     return send(res, 200, await addFromDrive(pid, str((await readJson(req)).url, 500)));
   }
 
-  if (sub === 'report' && m === 'PUT') {
+  // Đồng bộ lại folder Drive đã dán: video mới bỏ vào folder được tự thêm + tự quét.
+  if (sub === 'drive-sync' && m === 'POST') {
     ownerOnly();
-    setReport(pid, await saveUpload(req, REPORT_EXT));
+    if (!proj.drive_folder || !GKEY) return send(res, 200, { videos: 0, report: '' });
+    return send(res, 200, await addFromDrive(pid, `https://drive.google.com/drive/folders/${proj.drive_folder}`));
+  }
+
+  if (sub === 'report' && m === 'POST') {
+    ownerOnly();
+    const f = await readReport(req);
+    setReport(pid, f.name, f.buf, f.ext);
     return send(res, 202, { ok: true });
   }
 
@@ -1135,6 +1140,26 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     }
   }
   throw new HttpError(404, 'not found');
+}
+
+// ---- Sao lưu DB lên GitHub: kiểm tra mỗi 15s, có thay đổi thì lưu (tối đa 1 lần/phút) + khi Render tắt server ----
+if (dbsync.enabled) {
+  let saved = -1, lastAt = 0, busy = false;
+  const backup = async (force = false) => {
+    const n = (q('SELECT total_changes() AS n').get() as any).n;
+    if (busy || n === saved || (!force && Date.now() - lastAt < 60_000)) return;
+    busy = true;
+    try {
+      const tmp = DB_FILE + '.snap';
+      fs.rmSync(tmp, { force: true });
+      db.exec(`VACUUM INTO '${tmp.replaceAll("'", "''")}'`); // bản chụp nhất quán
+      await dbsync.save(fs.readFileSync(tmp));
+      fs.rmSync(tmp, { force: true });
+      saved = n; lastAt = Date.now();
+    } catch (e) { console.error('Sao lưu DB lỗi:', (e as Error).message); } finally { busy = false; }
+  };
+  setInterval(() => backup(), 15_000);
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) process.once(sig, () => { backup(true).finally(() => process.exit(0)); });
 }
 
 http.createServer((req, res) => route(req, res).catch((e) => {

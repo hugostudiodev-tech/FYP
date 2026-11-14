@@ -255,10 +255,6 @@ textarea.code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
 .todo li { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
 .todo .links { display: flex; flex-wrap: wrap; gap: 6px; }
 .todo .links button { min-height: 26px; font-size: 12px; padding: 0 8px; font-weight: 400; }
-.dropzone { display: grid; place-items: center; gap: 6px; padding: 28px; border: 1.5px dashed var(--line-2); border-radius: var(--radius);
-  text-align: center; color: var(--muted); cursor: pointer; }
-.dropzone:hover, .dropzone.over { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.dropzone .i { width: 28px; height: 28px; }
 progress { width: 100%; height: 6px; accent-color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

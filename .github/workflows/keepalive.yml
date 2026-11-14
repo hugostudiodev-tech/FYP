@@ -1,0 +1,11 @@
+# Render free tắt server sau 15 phút không có request → ping 10 phút/lần để giảng viên không phải chờ ~1 phút.
+# (GitHub tự tắt lịch này nếu repo không có commit trong 60 ngày — vào tab Actions bật lại.)
+name: keep-alive
+on:
+  schedule: [{ cron: '*/10 * * * *' }]
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 90 "${{ vars.API_URL || 'https://fyp-api.onrender.com' }}/api/health"

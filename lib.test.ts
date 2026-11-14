@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { splitByHeadings, parseRange } from './lib.ts';
+import { splitByHeadings } from './lib.ts';
 
 test('splitByHeadings', () => {
   const s = splitByHeadings('intro\n# Scope\nA\n## Kế hoạch\nB\n# Sơ đồ\n```mermaid\ngraph TD; A-->B\n```\nmô tả');
@@ -10,14 +10,6 @@ test('splitByHeadings', () => {
   assert.equal(s[3].markdown, 'mô tả');
 });
 
-test('parseRange', () => {
-  assert.deepEqual(parseRange('bytes=0-99', 1000), { start: 0, end: 99 });
-  assert.deepEqual(parseRange('bytes=900-', 1000), { start: 900, end: 999 });
-  assert.deepEqual(parseRange('bytes=-100', 1000), { start: 900, end: 999 });
-  assert.deepEqual(parseRange('bytes=0-5000', 1000), { start: 0, end: 999 });
-  assert.equal(parseRange('bytes=2000-', 1000), null);
-  assert.equal(parseRange(undefined, 1000), null);
-});
 
 import { cleanAnchor } from './lib.ts';
 test('cleanAnchor', () => {

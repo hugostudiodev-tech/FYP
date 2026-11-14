@@ -9,7 +9,7 @@ hoặc đúng đoạn được nhận xét.
 
 **Sinh viên** (có tài khoản)
 1. Tạo tài khoản: họ và tên, MSSV, số điện thoại. Đăng nhập chỉ cần MSSV.
-2. Tạo dự án, rồi thêm video (dán link Google Drive file/folder hoặc upload) và báo cáo (.pdf / .md / .txt).
+2. Tạo dự án, rồi dán link **folder Google Drive** chứa video (hệ thống không lưu video), và tải báo cáo lên (PDF/Word/MD ≤ 4MB, lớn hơn thì để trong folder Drive).
 3. AI tách báo cáo thành các phần, vẽ lại sơ đồ có sẵn và **tự vẽ thêm** sơ đồ còn thiếu (kiến trúc, ERD, sequence, Gantt…).
 4. Hệ thống hiện **"Bài trình bày còn thiếu thông tin"**: các câu hỏi cụ thể để trả lời ngay, câu trả lời tự gắn vào đúng phần.
 5. Thêm video là AI tự quét: chia chương, chấm từng cảnh cần quay, tóm tắt demo (xem mục Video bên dưới).
@@ -46,7 +46,11 @@ Cần Node ≥ 23.6 (chạy `.ts` trực tiếp, `node:sqlite` có sẵn).
 | `GOOGLE_API_KEY` | Đọc Google Drive. Kiêm khoá Gemini **dự phòng** cho sinh viên chưa có khoá riêng | Không dán được link Drive; sinh viên bắt buộc dùng khoá riêng |
 | `GROQ_API_KEY` | Khoá Groq dự phòng cho việc chỉ có chữ | Bỏ qua |
 | `GEMINI_MODELS` | Thứ tự model Gemini | `gemini-flash-lite-latest,gemini-flash-latest` |
-| `PORT`, `HOST` | Cổng và địa chỉ nghe | `3000`, `127.0.0.1` (chỉ nội bộ, Caddy đứng trước) |
+| `PORT`, `HOST` | Cổng và địa chỉ nghe | `3000`, `127.0.0.1` (Render: `0.0.0.0`) |
+| `DRIVE_BROWSER_KEY` | Phát video thẳng từ Google (khoá giới hạn theo tên miền) | Video đi qua `/drive/<id>` của server |
+| `PUBLIC_API_ORIGIN` | Địa chỉ public của API (Render) | Cùng địa chỉ với trang |
+| `GITHUB_DATA_REPO`, `GITHUB_DATA_TOKEN`, `DB_SECRET` | Sao lưu DB (mã hoá) lên GitHub, tự khôi phục khi khởi động | Chỉ dùng file `data.db` trên máy |
+| `MAX_REPORT_MB` | Dung lượng báo cáo tải lên | `4` (giới hạn body của Vercel) |
 
 Khoá Drive: trong Google Cloud Console bật **Google Drive API** cho project của key. Video/folder phải share "Bất kỳ ai có đường liên kết".
 
@@ -108,102 +112,100 @@ Trình sửa sơ đồ (⋯ › Sửa):
 - Chèn mẫu theo 9 loại sơ đồ, có bảng cú pháp và danh sách lỗi hay gặp.
 - Nút **AI sửa lỗi** sửa mã dựa trên thông báo lỗi.
 
-## Video trên Google Drive
+## Hệ thống không lưu file
 
-Khung xem trước nhúng từ Drive không cho web biết video đang ở giây nào. Vì vậy server lấy video qua Drive API và phát trong trình phát
-của web (vẫn tua được). Server chỉ phát lại những file đã được đăng trong một dự án.
-Lưu ý: dung lượng video đi qua server, và Drive có thể tạm chặn file bị xem quá nhiều. Khi đó chuyển video sang Cloudflare R2 / S3.
+- **Video**: 100% nằm trên Google Drive cá nhân của sinh viên (folder chia sẻ "Bất kỳ ai có đường liên kết"). Hệ thống chỉ đọc để phát và để AI quét.
+  Dán link folder một lần; về sau bỏ video mới vào folder thì mở trang dự án là hệ thống **tự đồng bộ**: thêm video mới và tự quét.
+- **Báo cáo**: đọc một lần để AI tách phần, bảng, sơ đồ; file gốc không được lưu.
+- **Dữ liệu** (tài khoản, các phần báo cáo, góp ý, điểm…): một file SQLite. Trên Render được **sao lưu mã hoá lên GitHub** và tự khôi phục khi khởi động (xem `dbsync.ts`).
 
-## Deploy lên fyp.hugowishpax.studio
+## Deploy miễn phí: Vercel + Render + GitHub + Cloudflare
 
-Cần một máy chạy Node liên tục và có ổ đĩa (SQLite và file upload nằm trên đĩa). Vì vậy dùng **VPS**, không dùng hosting tĩnh hay serverless.
-
-### 1. Thuê VPS
-- Ubuntu 24.04, tối thiểu 1 vCPU, 2 GB RAM, 40 GB SSD, có IPv4 công khai (khoảng 5–6$/tháng ở Hetzner, Vultr, DigitalOcean…).
-- Nếu sinh viên tải video trực tiếp lên server (không qua Drive), chọn ổ đĩa lớn hơn: mỗi video demo khoảng 50–300 MB.
-
-### 2. Gắn tên miền
-Vào trang quản lý DNS của `hugowishpax.studio` và thêm bản ghi:
-
-| Type | Name | Value | TTL |
-|---|---|---|---|
-| A | `fyp` | IP của VPS | Auto |
-
-- Dùng **Cloudflare**: để bản ghi này ở chế độ **DNS only (mây xám)**. Bật proxy (mây cam) thì gói miễn phí chặn upload trên 100 MB và cắt kết nối sau 100 giây, nên tải video sẽ lỗi.
-- Kiểm tra: `dig +short fyp.hugowishpax.studio` phải trả về đúng IP VPS (thường mất vài phút).
-
-### 3. Cài đặt trên VPS
-
-**Cách nhanh (khuyên dùng):** SSH vào VPS bằng root và chạy một lệnh. Lệnh này tự cài mọi thứ ở dưới, và chạy lại lần nữa là cập nhật lên code mới:
-```bash
-curl -fsSL https://raw.githubusercontent.com/hugostudiodev-tech/FYP/main/deploy/setup.sh | bash
-```
-
-**Cách làm tay** (giống hệt những gì script làm):
-```bash
-ssh root@IP_VPS
-
-# Cập nhật hệ thống + tường lửa (chỉ mở SSH, HTTP, HTTPS)
-apt update && apt upgrade -y
-ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
-
-# Node.js (cần >= 23.6) và git
-curl -fsSL https://deb.nodesource.com/setup_current.x | bash -
-apt install -y nodejs git
-node -v
-
-# Caddy (reverse proxy + HTTPS tự động)
-apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
-apt update && apt install -y caddy
-
-# User riêng để chạy app (không chạy bằng root)
-adduser --system --group --home /opt/fyp fyp
-git clone https://github.com/hugostudiodev-tech/FYP.git /opt/fyp
-chown -R fyp:fyp /opt/fyp
-cd /opt/fyp && sudo -u fyp npm ci --omit=dev
-
-# Cấu hình (khoá API chung là tuỳ chọn, xem bảng biến môi trường ở trên)
-sudo -u fyp cp .env.example .env && nano .env && chmod 600 .env
-
-# Chạy nền + tự khởi động lại
-cp deploy/fyp.service /etc/systemd/system/fyp.service
-systemctl daemon-reload && systemctl enable --now fyp
-systemctl status fyp            # phải thấy "active (running)"
-
-# HTTPS cho tên miền
-cp deploy/Caddyfile /etc/caddy/Caddyfile
-systemctl reload caddy
-```
-Mở **https://fyp.hugowishpax.studio**. Lần đầu Caddy xin chứng chỉ mất khoảng 10–30 giây.
-
-### 4. Cập nhật phiên bản mới
-```bash
-cd /opt/fyp && sudo -u fyp git pull && sudo -u fyp npm ci --omit=dev && systemctl restart fyp
-```
-
-### 5. Sao lưu hằng ngày (dữ liệu chỉ nằm ở `data.db` và `uploads/`)
-```bash
-mkdir -p /root/backup
-crontab -e   # thêm dòng dưới: 3 giờ sáng mỗi ngày, giữ 14 bản gần nhất
-0 3 * * * cd /opt/fyp && node -e "new (require('node:sqlite').DatabaseSync)('data.db').exec(\"VACUUM INTO '/root/backup/data-$(date +\%F).db'\")" && tar czf /root/backup/uploads-$(date +\%F).tgz uploads && find /root/backup -mtime +14 -delete
-```
-
-### 6. Theo dõi và xử lý lỗi
-| Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
+| Thành phần | Dịch vụ (gói miễn phí) | Ghi chú |
 |---|---|---|
-| Không vào được, lỗi chứng chỉ | DNS chưa trỏ đúng, hoặc Cloudflare đang bật proxy | `dig +short fyp.hugowishpax.studio`; chuyển sang DNS only |
-| 502 Bad Gateway | App không chạy | `journalctl -u fyp -n 50` để xem lỗi, `systemctl restart fyp` |
-| 413 khi tải video | Đi qua proxy Cloudflare | Chuyển DNS only, hoặc dùng link Google Drive |
-| Xem log trực tiếp | | `journalctl -u fyp -f` |
+| Giao diện (`public/`) | **Vercel** | `vercel.json` chuyển `/api/*` sang Render nên trình duyệt thấy cùng 1 tên miền (cookie đăng nhập chạy bình thường) |
+| API (`server.ts`) | **Render** Web Service | Ngủ sau 15 phút không có request; GitHub Actions ping 10 phút/lần để giữ thức |
+| Database | **GitHub** Releases của 1 repo riêng tư | Nén + mã hoá AES-256-GCM; lưu khi có thay đổi (tối đa 1 lần/phút) và khi Render tắt server; giữ 3 bản mới nhất + 14 bản theo ngày |
+| Video | **Google Drive** của sinh viên | Hệ thống không lưu |
+| Tên miền | **Cloudflare** DNS | `fyp.hugowishpax.studio` → Vercel |
 
-App chỉ nghe ở `127.0.0.1:3000`; mọi truy cập từ ngoài phải đi qua Caddy (HTTPS).
-Caddy gửi kèm `X-Forwarded-Proto: https` nên cookie đăng nhập tự bật cờ `Secure`.
+### Bước 1. Repo lưu dữ liệu (GitHub, khoảng 3 phút)
+1. Tạo repo mới **Private** tên `FYP-data`, tích **Add a README file** (cần ít nhất 1 commit).
+2. Tạo token: GitHub › Settings › Developer settings › **Fine-grained tokens** › Generate new token
+   - Repository access: **Only select repositories** → `FYP-data`
+   - Permissions › Repository permissions › **Contents: Read and write**
+   - Sao chép token (bắt đầu bằng `github_pat_`). Đây là `GITHUB_DATA_TOKEN`; `GITHUB_DATA_REPO` = `tên-tài-khoản/FYP-data`.
+3. Tạo `DB_SECRET` (chuỗi ngẫu nhiên). Trên Mac: `openssl rand -base64 48`.
+   **Cất vào trình quản lý mật khẩu**: mất chuỗi này thì không giải mã được bản sao lưu.
+
+### Bước 2. Khoá Google Drive (Google Cloud, khoảng 5 phút)
+1. [console.cloud.google.com](https://console.cloud.google.com) › tạo hoặc chọn project › **APIs & Services › Library** › bật **Google Drive API**.
+2. **Credentials › Create credentials › API key** → `GOOGLE_API_KEY`. Bấm Edit key › API restrictions › chỉ chọn **Google Drive API**.
+3. (Tuỳ chọn, nên làm) Tạo khoá thứ hai → `DRIVE_BROWSER_KEY`:
+   - Application restrictions › **Websites**: `https://fyp.hugowishpax.studio/*`
+   - API restrictions: **Google Drive API**
+   - Có khoá này thì video phát thẳng từ Google, không tốn băng thông Render (gói free giới hạn 100 GB/tháng).
+
+### Bước 3. API trên Render (khoảng 5 phút)
+1. [render.com](https://render.com) › đăng nhập bằng GitHub › **New › Blueprint** › chọn repo `FYP`. Render đọc `render.yaml`.
+2. Điền các biến được hỏi: `DB_SECRET`, `GITHUB_DATA_REPO`, `GITHUB_DATA_TOKEN`, `GOOGLE_API_KEY`, `DRIVE_BROWSER_KEY` (tuỳ chọn), `GROQ_API_KEY` (tuỳ chọn), rồi bấm **Apply**.
+3. Đợi deploy xong, mở `https://fyp-api.onrender.com/api/health`. Phải thấy `{"ok":true}`.
+   Tab Logs có dòng *"Chưa có bản sao lưu — tạo DB mới"* (lần đầu).
+4. Nếu Render đặt địa chỉ khác `fyp-api.onrender.com` (do tên đã có người dùng), sửa 3 chỗ:
+   - Biến `PUBLIC_API_ORIGIN` trên Render
+   - Phần `destination` trong `vercel.json`
+   - Biến Actions `API_URL` của repo `FYP` (Settings › Secrets and variables › Actions › Variables)
+
+### Bước 4. Giao diện trên Vercel (khoảng 3 phút)
+1. [vercel.com](https://vercel.com) › đăng nhập bằng GitHub › **Add New › Project** › Import `FYP`.
+2. Framework Preset: **Other**, giữ nguyên các mục khác (đã có `vercel.json`) › **Deploy**.
+3. Project › **Settings › Domains** › thêm `fyp.hugowishpax.studio`. Vercel hiện bản ghi DNS cần tạo (thường là CNAME). Giữ trang này để dùng ở Bước 5.
+
+### Bước 5. Gắn tên miền trên Cloudflare (khoảng 2 phút)
+dash.cloudflare.com › `hugowishpax.studio` › **DNS › Records › Add record**:
+
+| Type | Name | Target | Proxy status |
+|---|---|---|---|
+| CNAME | `fyp` | giá trị Vercel hiện ở Bước 4 (VD: `cname.vercel-dns.com`) | **DNS only (mây xám)** |
+
+Quay lại Vercel › Domains, đợi hiện **Valid Configuration**. Vercel tự cấp HTTPS.
+
+### Bước 6. Giữ server thức
+Repo `FYP` › tab **Actions** › bật workflow **keep-alive** (bấm *Run workflow* để thử). Ping 10 phút/lần. GitHub tự tắt lịch này nếu repo không có commit trong 60 ngày; khi đó vào bật lại.
+
+### Kiểm tra sau khi deploy
+- [ ] `https://fyp.hugowishpax.studio` mở được, đăng ký được tài khoản sinh viên
+- [ ] Tạo dự án, dán link folder Drive có video, thấy video phát và tua được
+- [ ] Repo `FYP-data` › Releases › `db` có file `snap-….enc` sau khoảng 1 phút
+- [ ] Render › **Manual Deploy › Restart**, đăng nhập lại: dữ liệu vẫn còn
+- [ ] Mở trên điện thoại: thấy màn hình "Vui lòng mở trên máy tính"
+
+### Cập nhật code
+`git push` lên `main` thì Vercel và Render **tự deploy lại**. Trước khi tắt, Render gửi tín hiệu dừng; server lưu DB lên GitHub rồi mới tắt, và bản mới tự khôi phục khi khởi động.
+
+### Giới hạn của gói miễn phí
+| Dịch vụ | Giới hạn | Ảnh hưởng |
+|---|---|---|
+| Render free | 512 MB RAM, ngủ sau 15 phút, 750 giờ/tháng (đủ chạy 1 service cả tháng) | Có keep-alive thì gần như không ngủ |
+| Vercel Hobby | Dùng cá nhân/phi thương mại; body request ≤ ~4,5 MB | Báo cáo tải lên ≤ 4 MB, lớn hơn thì để trên Drive |
+| GitHub Releases | Mỗi file ≤ 2 GB | DB chỉ vài MB |
+| Gemini free | Theo khoá của từng sinh viên | Xem mục AI |
+
+### Xử lý lỗi
+| Hiện tượng | Kiểm tra |
+|---|---|
+| Trang mở được nhưng mọi thao tác báo lỗi | `https://fyp-api.onrender.com/api/health`; Render › Logs |
+| Render log: *"Không tạo được release db"* | Repo `FYP-data` chưa có commit nào: tạo README |
+| Render log: lỗi GitHub 401/403 | Token sai hoặc thiếu quyền Contents: Read and write |
+| Render log: lỗi giải mã khi khởi động | `DB_SECRET` khác lúc lưu: đặt lại đúng chuỗi cũ |
+| Video không phát | Folder Drive chưa chia sẻ "Bất kỳ ai có đường liên kết"; hoặc `DRIVE_BROWSER_KEY` chưa cho phép đúng tên miền |
+| Domain chưa nhận | Bản ghi `fyp` đang bật proxy (mây cam): chuyển sang DNS only |
 
 ## Cấu trúc
 
 - [server.ts](server.ts): HTTP API, SQLite, tài khoản, phân quyền chủ dự án / link review, Drive, AI nhiều nhà cung cấp, phiếu chấm
+- [dbsync.ts](dbsync.ts): sao lưu và khôi phục DB mã hoá qua GitHub Releases; test ở [dbsync.test.ts](dbsync.test.ts)
+- [vercel.json](vercel.json), [render.yaml](render.yaml), [.github/workflows/keepalive.yml](.github/workflows/keepalive.yml): cấu hình deploy
 - [lib.ts](lib.ts): kiểu dữ liệu, rubric & thang UK, bản trình bày tự cắt, hàm thuần; test ở [lib.test.ts](lib.test.ts)
 - [public/ui.js](public/ui.js): icon, toast, menu, hộp xác nhận, chặn thiết bị di động
 - [public/index.html](public/index.html): đăng nhập/đăng ký, danh sách dự án của tôi
