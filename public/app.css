@@ -144,7 +144,8 @@ dialog::backdrop { background: rgb(15 23 42 / .45); }
 /* ===== Trang dự án ===== */
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; padding: 20px; max-width: 1500px; margin: 0 auto; align-items: start; }
 @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; padding: 12px; } .side { position: static !important; max-height: 80vh !important; } }
-main { display: grid; gap: 16px; min-width: 0; }
+/* minmax(0, 1fr): không có thì cột ngầm của main giãn theo bảng/sơ đồ rộng nhất và chui xuống cột góp ý */
+main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
 
 .steps { display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px; }
 .step { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border: 0; background: none;
@@ -177,10 +178,20 @@ main { display: grid; gap: 16px; min-width: 0; }
 .chapters b { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .report { overflow: clip; }
-.snav { position: sticky; top: 57px; z-index: 5; display: flex; gap: 4px; overflow-x: auto; padding: 8px 12px;
-  background: var(--surface); border-bottom: 1px solid var(--line); border-top: 1px solid var(--line); scrollbar-width: thin; }
-.snav button { min-height: 30px; border: 0; background: none; color: var(--muted); font-size: 13px; padding: 0 10px; flex: none; font-weight: 400; }
+/* Mục lục: thanh dọc mép trái, thu gọn chỉ còn số; rê chuột vào thì bung ra */
+.snav { position: fixed; left: 8px; top: 50%; transform: translateY(-50%); z-index: 20; display: flex; flex-direction: column; gap: 2px;
+  width: 44px; max-height: calc(100dvh - 120px); overflow: hidden auto; padding: 6px; scrollbar-width: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+  transition: width .18s ease, box-shadow .18s ease; }
+.snav:hover, .snav:focus-within { width: 300px; box-shadow: var(--shadow-lg); }
+.snav button { display: flex; align-items: center; gap: 10px; min-height: 30px; width: 100%; border: 0; background: none; color: var(--muted);
+  font-size: 13px; padding: 0 6px; flex: none; font-weight: 400; justify-content: flex-start; text-align: left; white-space: nowrap; border-radius: 8px; }
+.snav button .n { flex: none; width: 20px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.snav button .t { overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity .12s; }
+.snav:hover .t, .snav:focus-within .t { opacity: 1; }
 .snav button:hover { color: var(--text); background: var(--surface-2); }
+.snav button.on { color: var(--accent); background: var(--accent-soft); }
+.layout:has(.snav:not([hidden])) { padding-left: 64px; }
 .section { padding: 18px 20px 22px; border-top: 1px solid var(--line); scroll-margin-top: 110px; }
 .section:first-child { border-top: 0; }
 .section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
@@ -199,7 +210,29 @@ main { display: grid; gap: 16px; min-width: 0; }
 .section-body tr:last-child td { border-bottom: 0; }
 .section-body tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
 .diagram { overflow-x: auto; padding: 16px; margin-top: 12px; background: var(--surface-2); border-radius: var(--radius-sm); text-align: center; }
-.diagram svg { max-width: 100%; height: auto; }
+.diagram svg { max-width: 100% !important; height: auto; }
+.diagram:has(svg) { cursor: zoom-in; position: relative; }
+.diagram:has(svg)::after { content: 'Bấm để phóng to'; position: absolute; top: 8px; right: 10px; font-size: 12px; color: var(--muted);
+  opacity: 0; transition: opacity .15s; }
+.diagram:has(svg):hover::after { opacity: 1; }
+
+/* Xem sơ đồ toàn màn hình: phóng to, kéo, giảng viên vẽ góp ý */
+dialog.lightbox { width: 100vw; height: 100dvh; max-width: none; max-height: none; border-radius: 0; display: none; flex-direction: column; }
+dialog.lightbox[open] { display: flex; }
+.lb-bar { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.lb-bar h2 { font-size: 15px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-bar .zoom { min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.lb-bar .sep { width: 1px; height: 24px; background: var(--line); margin: 0 4px; }
+.lb-bar button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.lb-stage { flex: 1; position: relative; overflow: hidden; background: var(--surface-2); cursor: grab; touch-action: none; user-select: none; }
+.lb-stage.panning { cursor: grabbing; }
+.lb-stage.pen { cursor: crosshair; }
+.lb-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; background: var(--surface); box-shadow: var(--shadow); border-radius: 8px; }
+.lb-canvas > svg { display: block; max-width: none !important; }
+.lb-canvas > svg.ink { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.ink path { fill: none; stroke: #e11d48; stroke-linecap: round; stroke-linejoin: round; }
+.lb-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 12.5px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; pointer-events: none; }
 .diagram pre { text-align: left; font-size: 12px; margin: 8px 0 0; white-space: pre-wrap; }
 .diagram .err { color: var(--danger); font-size: 13px; text-align: left; }
 mark { background: var(--mark); color: inherit; cursor: pointer; border-radius: 3px; padding: 0 1px; }

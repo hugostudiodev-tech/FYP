@@ -155,3 +155,8 @@
     để xem video, báo cáo và góp ý cùng lúc.${small && !touch ? ' Nếu đang dùng máy tính, hãy mở rộng cửa sổ trình duyệt.' : ''}</p></div>`;
   if (small && !touch) addEventListener('resize', () => { if (innerWidth >= 900) location.reload(); });
 })();
+
+// Cấm zoom cả trang để bố cục luôn đúng khi demo. Muốn xem rõ sơ đồ: bấm vào sơ đồ để mở trình xem có phóng to.
+document.addEventListener('wheel', (e) => { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false });
+document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && ['+', '=', '-', '_', '0'].includes(e.key)) e.preventDefault(); });
+for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, (e) => e.preventDefault());

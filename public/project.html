@@ -13,7 +13,7 @@
 </head>
 <body>
 <header class="topbar">
-  <a href="/" id="backBtn" class="btn icon-btn" aria-label="Về danh sách dự án" title="Về danh sách dự án"><i data-i="back"></i></a>
+  <a href="/" id="backBtn" hidden class="btn icon-btn" aria-label="Về danh sách dự án" title="Về danh sách dự án"><i data-i="back"></i></a>
   <div class="titlebox"><h1 id="title">Đang tải…</h1><p id="subtitle"></p></div>
   <!-- Sinh viên -->
   <button id="missingBadge" class="badge warn" hidden></button>
@@ -278,6 +278,24 @@
     <p class="muted">Không cần tài khoản. Trình duyệt này ghi nhớ thầy/cô để sửa, xoá góp ý và phiếu chấm của mình; nên dùng cùng một trình duyệt khi quay lại.</p>
   </div>
   <div class="dlg-foot"><button class="primary" data-close>Bắt đầu review</button></div>
+</dialog>
+
+<dialog id="dlgDiagram" class="lightbox" aria-labelledby="hDiagram">
+  <div class="lb-bar">
+    <h2 id="hDiagram"></h2>
+    <button class="icon-btn" id="lbOut" aria-label="Thu nhỏ" title="Thu nhỏ (−)"><span aria-hidden="true">−</span></button>
+    <span class="zoom" id="lbZoom">100%</span>
+    <button class="icon-btn" id="lbIn" aria-label="Phóng to" title="Phóng to (+)"><i data-i="plus"></i></button>
+    <button class="ghost" id="lbFit" title="Vừa màn hình (0)">Vừa màn hình</button>
+    <span class="sep" id="lbSep" hidden></span>
+    <button id="lbPen" hidden aria-pressed="false" title="Vẽ trực tiếp lên sơ đồ (P)"><i data-i="pencil"></i>Vẽ góp ý</button>
+    <button class="icon-btn" id="lbUndo" hidden aria-label="Xoá nét vừa vẽ" title="Xoá nét vừa vẽ (Ctrl+Z)"><i data-i="refresh"></i></button>
+    <button class="icon-btn" id="lbClear" hidden aria-label="Xoá hết nét vẽ" title="Xoá hết nét vẽ"><i data-i="trash"></i></button>
+    <button class="primary" id="lbPin" hidden><i data-i="pin"></i>Ghim vào góp ý</button>
+    <span class="sep"></span>
+    <button class="icon-btn" data-close aria-label="Đóng" title="Đóng (Esc)"><i data-i="x"></i></button>
+  </div>
+  <div class="lb-stage" id="lbStage"><div class="lb-canvas" id="lbCanvas"></div><div class="lb-hint" id="lbHint"></div></div>
 </dialog>
 
 <dialog id="dlgEdit" aria-labelledby="hEdit">

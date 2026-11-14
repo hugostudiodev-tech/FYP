@@ -15,6 +15,8 @@ export type Anchor =
   | { type: 'video'; video: string; t: number }
   | { type: 'text'; section: string; start: number; end: number; quote: string }
   | { type: 'section'; section: string }
+  /** Nét vẽ của giảng viên trên sơ đồ: mỗi nét là [x1, y1, x2, y2, …] theo toạ độ viewBox của sơ đồ. */
+  | { type: 'draw'; section: string; strokes: number[][] }
   | { type: 'general' };
 
 export type Role = 'lecturer' | 'student' | 'ai';
@@ -55,6 +57,13 @@ export function cleanAnchor(a: any): Anchor {
   const s = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
   if (a?.type === 'video') return { type: 'video', video: s(a.video, 20), t: Math.max(0, Number(a.t) || 0) };
   if (a?.type === 'section') return { type: 'section', section: s(a.section, 20) };
+  if (a?.type === 'draw') { // ponytail: tối đa 60 nét × 2000 số ≈ vài chục KB / góp ý
+    const strokes = (Array.isArray(a.strokes) ? a.strokes : []).slice(0, 60)
+      .map((st: unknown) => (Array.isArray(st) ? st : []).slice(0, 2000).map(Number).filter(Number.isFinite)
+        .map((n: number) => Math.round(Math.max(-1e5, Math.min(1e5, n)) * 10) / 10))
+      .map((st: number[]) => st.slice(0, st.length & ~1)).filter((st: number[]) => st.length >= 4);
+    return strokes.length ? { type: 'draw', section: s(a.section, 20), strokes } : { type: 'section', section: s(a.section, 20) };
+  }
   if (a?.type === 'text') return { type: 'text', section: s(a.section, 20), start: a.start | 0, end: a.end | 0, quote: s(a.quote, 500) };
   return { type: 'general' };
 }

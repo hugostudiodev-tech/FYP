@@ -17,6 +17,9 @@ test('cleanAnchor', () => {
   assert.deepEqual(cleanAnchor({ type: 'evil' }), { type: 'general' });
   assert.deepEqual(cleanAnchor(null), { type: 'general' });
   assert.deepEqual(cleanAnchor({ type: 'section', section: 'sab', x: 1 }), { type: 'section', section: 'sab' });
+  assert.deepEqual(cleanAnchor({ type: 'draw', section: 's1', strokes: [[1.26, 2, 3, 'x', 4, 5, 6], [1, 2], 'bad'] }),
+    { type: 'draw', section: 's1', strokes: [[1.3, 2, 3, 4, 5, 6]] });
+  assert.deepEqual(cleanAnchor({ type: 'draw', section: 's1', strokes: [] }), { type: 'section', section: 's1' });
 });
 
 import { driveRef } from './lib.ts';

@@ -393,7 +393,7 @@ async function aiTodo(pid: string, sections: Section[]) {
   const list = open.map((c) => {
     const a = JSON.parse(c.anchor);
     const where = a.type === 'video' ? `video tại giây ${Math.round(a.t)}` : a.type === 'text' ? `đoạn "${a.quote}" trong phần ${title(a.section)}`
-      : a.type === 'section' ? `phần ${title(a.section)}` : 'chung';
+      : a.type === 'section' ? `phần ${title(a.section)}` : a.type === 'draw' ? `hình vẽ trên sơ đồ phần ${title(a.section)}` : 'chung';
     return `- [${c.id}] (${where}) ${c.body}`;
   }).join('\n');
   const r = await aiText(pid,
@@ -448,7 +448,7 @@ async function aiSuggest(pid: string, proj: any, b: any) {
   const draft = str(b.text, 2000);
   const sections: Section[] = JSON.parse(proj.sections);
   let where = '';
-  if (a.type === 'text' || a.type === 'section') {
+  if (a.type === 'text' || a.type === 'section' || a.type === 'draw') {
     const s = sections.find((x) => x.id === a.section);
     where = `Phần "${s?.title}" của báo cáo:\n${(s?.markdown || '').slice(0, 6000)}` + (a.type === 'text' ? `\n\nGiảng viên đang bôi đen đoạn: "${a.quote}"` : '');
   } else if (a.type === 'video') {

@@ -227,6 +227,13 @@ function renderCoverage() {
 }
 
 // ============ Báo cáo ============
+// Mục lục bên trái tô đậm phần đang đọc.
+const tocSpy = new IntersectionObserver((entries) => {
+  for (const en of entries) if (en.isIntersecting) {
+    const id = en.target.id.slice(4);
+    document.querySelectorAll('#snav button').forEach((b) => b.classList.toggle('on', b.dataset.sec === id));
+  }
+}, { rootMargin: '-30% 0px -60% 0px' });
 async function renderSections() {
   const key = JSON.stringify([project.sections, isOwner()]);
   if (rendered.sections === key) return;
@@ -235,6 +242,7 @@ async function renderSections() {
   box.replaceChildren();
   $('#snav').hidden = project.sections.length < 2;
   $('#snav').replaceChildren();
+  tocSpy.disconnect();
   if (!project.sections.length) {
     box.innerHTML = isOwner()
       ? `<div class="empty">${ic('file')}<h3>Chưa có báo cáo</h3><p>Tải báo cáo PDF/MD, AI tự tách thành các phần và tạo bảng, sơ đồ.</p>
@@ -266,7 +274,11 @@ async function renderSections() {
     if (s.mermaid) {
       const d = document.createElement('div');
       d.className = 'diagram';
-      try { d.innerHTML = DOMPurify.sanitize((await mermaid.render('m' + s.id, s.mermaid)).svg, { USE_PROFILES: { svg: true, svgFilters: true, html: true }, ADD_TAGS: ['foreignObject'] }); }
+      try {
+        d.innerHTML = DOMPurify.sanitize((await mermaid.render('m' + s.id, s.mermaid)).svg, { USE_PROFILES: { svg: true, svgFilters: true, html: true }, ADD_TAGS: ['foreignObject'] });
+        d.title = 'Bấm để phóng to';
+        d.onclick = () => openDiagram(s);
+      }
       catch {
         d.innerHTML = `<p class="err">${ic('alert')} Sơ đồ có lỗi cú pháp${isOwner() ? ' — bấm ⋯ › Sửa để chỉnh' : ''}.</p><pre></pre>`;
         d.querySelector('pre').textContent = s.mermaid;
@@ -276,8 +288,13 @@ async function renderSections() {
     box.append(el);
     const nb = document.createElement('button');
     nb.type = 'button';
-    nb.textContent = s.title;
+    nb.innerHTML = '<span class="n"></span><span class="t"></span>';
+    nb.querySelector('.n').textContent = i + 1;
+    nb.querySelector('.t').textContent = s.title;
+    nb.title = s.title;
+    nb.dataset.sec = s.id;
     nb.onclick = () => el.scrollIntoView({ behavior: 'smooth' });
+    tocSpy.observe(el);
     $('#snav').append(nb);
   }
   rendered.marks = '';
@@ -379,6 +396,7 @@ function anchorInfo(a) {
   }
   if (a.type === 'text') return ['file', `“${a.quote}”`];
   if (a.type === 'section') return ['file', project.sections.find((s) => s.id === a.section)?.title || 'Phần đã xoá'];
+  if (a.type === 'draw') return ['pencil', `Hình vẽ · ${project.sections.find((s) => s.id === a.section)?.title || 'Phần đã xoá'}`];
   return ['message', 'Góp ý chung'];
 }
 function setAnchor(a) {
@@ -407,7 +425,7 @@ $('#composer').addEventListener('submit', run(async (e) => {
 const ROLE = { lecturer: 'Giảng viên', student: 'Sinh viên', ai: 'Trợ lý AI' };
 function renderList() {
   const shown = comments.filter((c) => filter === 'all' || (filter === 'open' ? !c.resolved
-    : filter === 'text' ? ['text', 'section'].includes(c.anchor.type) : c.anchor.type === filter));
+    : filter === 'text' ? ['text', 'section', 'draw'].includes(c.anchor.type) : c.anchor.type === filter));
   const open = comments.filter((c) => !c.resolved && c.role !== 'student').length;
   $('#ccount').textContent = comments.length ? `· ${open} chưa sửa` : '';
   if (!shown.length) {
@@ -486,8 +504,147 @@ async function jumpTo(c) {
   } else if (a.type === 'section') {
     const s = document.getElementById('sec-' + a.section);
     if (s) flash(s);
+  } else if (a.type === 'draw') {
+    const s = project.sections.find((x) => x.id === a.section);
+    if (s) openDiagram(s, { strokes: a.strokes, author: c.author }); else toast('Phần này đã bị xoá', 'err');
   }
 }
+
+// ============ Xem sơ đồ: phóng to / kéo; giảng viên vẽ góp ý trực tiếp ============
+// Nét vẽ lưu theo toạ độ viewBox của sơ đồ nên đúng vị trí ở mọi mức phóng to.
+const lb = { s: null, scale: 1, x: 0, y: 0, vb: null, strokes: [], readonly: true, pen: false, drag: null };
+const lbStage = $('#lbStage'), lbCanvas = $('#lbCanvas');
+const SVGNS = 'http://www.w3.org/2000/svg';
+const strokePath = (st) => 'M' + st.reduce((acc, n, i) => acc + (i && i % 2 === 0 ? ' L' : ' ') + n, '');
+function lbInk() {
+  const ink = lbCanvas.querySelector('svg.ink');
+  ink.innerHTML = lb.strokes.map((st) => `<path d="${strokePath(st)}"/>`).join('');
+  ink.style.strokeWidth = 3 / lb.scale;
+  $('#lbUndo').disabled = $('#lbClear').disabled = $('#lbPin').disabled = !lb.strokes.length;
+}
+function lbApply() {
+  lbCanvas.style.transform = `translate(${lb.x}px, ${lb.y}px) scale(${lb.scale})`;
+  $('#lbZoom').textContent = Math.round(lb.scale * 100) + '%';
+  lbCanvas.querySelector('svg.ink').style.strokeWidth = 3 / lb.scale; // nét luôn dày 3px trên màn hình
+}
+function lbFit() {
+  const r = lbStage.getBoundingClientRect();
+  lb.scale = Math.min((r.width - 48) / lb.vb.width, (r.height - 48) / lb.vb.height, 3);
+  lb.x = (r.width - lb.vb.width * lb.scale) / 2;
+  lb.y = (r.height - lb.vb.height * lb.scale) / 2;
+  lbApply();
+}
+function lbZoomAt(f, cx, cy) {
+  const r = lbStage.getBoundingClientRect();
+  cx ??= r.width / 2; cy ??= r.height / 2;
+  const ns = Math.min(8, Math.max(0.1, lb.scale * f));
+  lb.x = cx - ((cx - lb.x) * ns) / lb.scale;
+  lb.y = cy - ((cy - lb.y) * ns) / lb.scale;
+  lb.scale = ns;
+  lbApply();
+}
+function lbSetPen(on) {
+  lb.pen = on;
+  $('#lbPen').setAttribute('aria-pressed', on);
+  lbStage.classList.toggle('pen', on);
+  $('#lbHint').textContent = on ? 'Đang vẽ: kéo chuột để khoanh, gạch chân. Xong bấm “Ghim vào góp ý”.' : 'Cuộn chuột để phóng to · kéo để di chuyển';
+}
+function openDiagram(s, view = null) {
+  const src = document.querySelector(`#sec-${CSS.escape(s.id)} .diagram svg`);
+  if (!src) return toast('Sơ đồ chưa vẽ xong', 'err');
+  const vb = src.viewBox.baseVal?.width ? src.viewBox.baseVal : src.getBBox();
+  lb.s = s;
+  lb.vb = { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
+  const svg = src.cloneNode(true);
+  svg.removeAttribute('style');
+  svg.setAttribute('width', vb.width);
+  svg.setAttribute('height', vb.height);
+  const ink = document.createElementNS(SVGNS, 'svg');
+  ink.setAttribute('class', 'ink');
+  ink.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.width} ${vb.height}`);
+  lbCanvas.style.width = vb.width + 'px';
+  lbCanvas.style.height = vb.height + 'px';
+  lbCanvas.replaceChildren(svg, ink);
+  // Owner chỉ xem; giảng viên được vẽ (trừ khi đang mở hình vẽ của một góp ý đã gửi).
+  lb.readonly = !!view || isOwner();
+  const draft = anchor.type === 'draw' && anchor.section === s.id ? anchor.strokes : [];
+  lb.strokes = view ? view.strokes.map((x) => [...x]) : draft.map((x) => [...x]);
+  for (const id of ['lbSep', 'lbPen', 'lbUndo', 'lbClear', 'lbPin']) $('#' + id).hidden = lb.readonly;
+  $('#hDiagram').textContent = s.title + (view ? ` · hình vẽ của ${view.author}` : '');
+  lbSetPen(false);
+  $('#dlgDiagram').showModal();
+  lbFit();
+  lbInk();
+}
+const lbPoint = (e) => {
+  const r = lbStage.getBoundingClientRect();
+  return [Math.round(((e.clientX - r.left - lb.x) / lb.scale + lb.vb.x) * 10) / 10,
+    Math.round(((e.clientY - r.top - lb.y) / lb.scale + lb.vb.y) * 10) / 10];
+};
+lbStage.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const r = lbStage.getBoundingClientRect();
+  lbZoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+lbStage.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  lbStage.setPointerCapture(e.pointerId);
+  if (lb.pen) {
+    const st = lbPoint(e);
+    lb.drag = { st, path: document.createElementNS(SVGNS, 'path') };
+    lbCanvas.querySelector('svg.ink').append(lb.drag.path);
+  } else {
+    lb.drag = { px: e.clientX, py: e.clientY, x: lb.x, y: lb.y };
+    lbStage.classList.add('panning');
+  }
+});
+lbStage.addEventListener('pointermove', (e) => {
+  const d = lb.drag;
+  if (!d) return;
+  if (d.st) {
+    const [x, y] = lbPoint(e);
+    const [lx, ly] = d.st.slice(-2);
+    if (Math.hypot(x - lx, y - ly) * lb.scale < 2) return; // bỏ điểm sát nhau cho nét nhẹ
+    d.st.push(x, y);
+    d.path.setAttribute('d', strokePath(d.st));
+  } else {
+    lb.x = d.x + e.clientX - d.px;
+    lb.y = d.y + e.clientY - d.py;
+    lbApply();
+  }
+});
+const lbEnd = () => {
+  const d = lb.drag;
+  lb.drag = null;
+  lbStage.classList.remove('panning');
+  if (d?.st && d.st.length >= 4 && lb.strokes.length < 60) lb.strokes.push(d.st);
+  if (d?.st) lbInk();
+};
+lbStage.addEventListener('pointerup', lbEnd);
+lbStage.addEventListener('pointercancel', lbEnd);
+$('#lbIn').onclick = () => lbZoomAt(1.25);
+$('#lbOut').onclick = () => lbZoomAt(0.8);
+$('#lbFit').onclick = lbFit;
+$('#lbPen').onclick = () => lbSetPen(!lb.pen);
+$('#lbUndo').onclick = () => { lb.strokes.pop(); lbInk(); };
+$('#lbClear').onclick = () => { lb.strokes = []; lbInk(); };
+$('#lbPin').onclick = () => {
+  setAnchor({ type: 'draw', section: lb.s.id, strokes: lb.strokes });
+  $('#dlgDiagram').close();
+  $('#text').focus();
+  toast('Đã ghim hình vẽ — viết nhận xét rồi bấm Gửi');
+};
+$('#dlgDiagram').addEventListener('keydown', (e) => {
+  if (e.target.closest('input, textarea')) return;
+  const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && k === 'z' && !lb.readonly) { e.preventDefault(); $('#lbUndo').click(); }
+  else if (e.ctrlKey || e.metaKey) return;
+  else if (k === '+' || k === '=') lbZoomAt(1.25);
+  else if (k === '-') lbZoomAt(0.8);
+  else if (k === '0') lbFit();
+  else if (k === 'p' && !lb.readonly) lbSetPen(!lb.pen);
+});
+window.addEventListener('resize', () => { if ($('#dlgDiagram').open) lbFit(); });
 function focusComment(cid, scroll = true) {
   document.querySelectorAll('.comment.active, mark.active').forEach((x) => x.classList.remove('active'));
   document.querySelectorAll(`mark[data-c="${CSS.escape(cid)}"]`).forEach((m) => m.classList.add('active'));
