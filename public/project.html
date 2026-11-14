@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a href="/" id="backBtn" class="btn icon-btn" aria-label="Về danh sách dự án" title="Về danh sách dự án"><i data-i="back"></i></a>
+  <div class="titlebox"><h1 id="title">Đang tải…</h1><p id="subtitle"></p></div>
+  <!-- Sinh viên -->
+  <button id="missingBadge" class="badge warn" hidden></button>
+  <button id="aiBtn" class="ghost" hidden aria-haspopup="menu"><i data-i="sparkles"></i><span class="hide-sm">Trợ lý AI</span></button>
+  <button id="shareBtn" class="primary" hidden><i data-i="send"></i><span class="hide-sm">Gửi giảng viên</span></button>
+  <button id="moreBtn" class="icon-btn" hidden aria-haspopup="menu" aria-label="Tuỳ chọn dự án" title="Tuỳ chọn dự án"><i data-i="more"></i></button>
+  <!-- Giảng viên -->
+  <span id="reviewBadge" class="badge accent" hidden><i data-i="eye"></i>Chế độ review</span>
+  <button id="helpBtn" class="icon-btn" hidden aria-label="Hướng dẫn & phím tắt (?)" title="Hướng dẫn & phím tắt (?)"><i data-i="help"></i></button>
+  <button id="nameBtn" class="ghost" hidden><i data-i="user"></i><span></span></button>
+  <button id="rateBtn" class="primary" hidden><i data-i="list"></i><span>Chấm điểm</span><span class="badge" id="rateState" style="margin-left:2px"></span></button>
+</header>
+
+<div class="layout">
+  <main>
+    <nav id="steps" class="card steps" hidden aria-label="Tiến độ chuẩn bị"></nav>
+    <div id="statusbar" class="statusbar" hidden role="status"></div>
+    <section id="brief" class="card brief" hidden aria-labelledby="hBrief"></section>
+    <section id="evals" class="card" hidden aria-labelledby="hEvals"></section>
+
+    <section class="card player" aria-labelledby="hVideo">
+      <div class="block-head">
+        <h2 id="hVideo"><i data-i="video"></i>Video demo <span class="count" id="vcount"></span></h2>
+        <div class="seg" id="modeSeg" hidden role="group" aria-label="Chế độ xem video">
+          <button type="button" data-mode="story" aria-pressed="true" title="Các đoạn đã tự cắt và sắp xếp theo yêu cầu">Bản trình bày</button>
+          <button type="button" data-mode="raw" aria-pressed="false">Video gốc</button>
+        </div>
+        <button id="guideBtn" class="ghost owner-only" hidden><i data-i="help"></i><span class="hide-sm">Hướng dẫn quay</span></button>
+        <button id="addVideoBtn" class="owner-only" hidden><i data-i="plus"></i><span class="hide-sm">Thêm video</span></button>
+        <button id="videoMore" class="icon-btn owner-only" hidden aria-haspopup="menu" aria-label="Tuỳ chọn video" title="Tuỳ chọn video"><i data-i="more"></i></button>
+      </div>
+      <div id="videoEmpty" class="empty" hidden></div>
+      <div id="playerWrap" hidden>
+        <video id="video" controls preload="metadata" playsinline></video>
+        <div class="vtabs" id="vtabs" role="tablist" aria-label="Danh sách đoạn video"></div>
+        <div class="chapters" id="chapters"></div>
+      </div>
+      <div id="scan" class="scan" hidden role="status"></div>
+      <div id="coverage" class="cov" hidden></div>
+    </section>
+
+    <section class="card report" aria-labelledby="hReport">
+      <div class="block-head">
+        <h2 id="hReport"><i data-i="file"></i>Báo cáo</h2>
+        <button id="addSectionBtn" class="icon-btn owner-only" hidden aria-label="Thêm phần" title="Thêm phần"><i data-i="plus"></i></button>
+        <button id="reportMore" class="icon-btn owner-only" hidden aria-haspopup="menu" aria-label="Tuỳ chọn báo cáo" title="Tuỳ chọn báo cáo"><i data-i="more"></i></button>
+      </div>
+      <nav class="snav" id="snav" aria-label="Mục lục báo cáo" hidden></nav>
+      <div id="sections"></div>
+    </section>
+  </main>
+
+  <aside class="card side" aria-labelledby="hComments">
+    <div class="block-head"><h2 id="hComments"><i data-i="message"></i>Góp ý <span class="count" id="ccount"></span></h2></div>
+    <form class="composer" id="composer">
+      <div id="anchor"></div>
+      <textarea id="text" maxlength="5000" required aria-label="Nội dung góp ý"
+        placeholder="Dừng video hoặc bôi đen một đoạn báo cáo, rồi viết góp ý…"></textarea>
+      <div id="suggest" class="suggest" hidden></div>
+      <div class="row"><span class="hint spacer">Ctrl + Enter để gửi</span>
+        <button type="button" id="suggestBtn" class="ghost" title="AI gợi ý góp ý tại vị trí đang ghim; có nháp thì viết lại cho rõ"><i data-i="sparkles"></i>Gợi ý</button>
+        <button class="primary"><i data-i="send"></i>Gửi</button></div>
+    </form>
+    <div class="filters">
+      <div class="seg" id="filters" role="group" aria-label="Lọc góp ý">
+        <button type="button" data-f="all" aria-pressed="true">Tất cả</button>
+        <button type="button" data-f="video" aria-pressed="false">Video</button>
+        <button type="button" data-f="text" aria-pressed="false">Báo cáo</button>
+        <button type="button" data-f="open" aria-pressed="false">Chưa sửa</button>
+      </div>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+</div>
+
+<!-- ===== Popup ===== -->
+<dialog id="dlgShare" aria-labelledby="hShare">
+  <div class="dlg-head"><h2 id="hShare">Gửi giảng viên</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-body">
+    <p class="muted small" style="margin:0 0 12px">Giảng viên mở link này để xem video, báo cáo và góp ý, không cần tài khoản.</p>
+    <div class="row"><input id="shareUrl" readonly aria-label="Link review"><button class="primary" id="copyBtn"><i data-i="copy"></i>Sao chép</button></div>
+    <div id="shareWarn" class="statusbar warn" style="margin-top:14px" hidden></div>
+  </div>
+  <div class="dlg-foot" style="justify-content:space-between">
+    <button id="rotateBtn" class="ghost" title="Link cũ sẽ không vào được nữa"><i data-i="refresh"></i>Tạo link mới</button>
+    <button data-close>Xong</button>
+  </div>
+</dialog>
+
+<dialog id="dlgAdd" aria-labelledby="hAdd">
+  <div class="dlg-head"><h2 id="hAdd">Thêm video</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-body">
+    <div id="addFor" class="statusbar" hidden style="margin-bottom:14px;display:block"></div>
+    <div class="seg" role="tablist" style="display:flex">
+      <button type="button" role="tab" data-src="drive" aria-selected="true" style="flex:1"><i data-i="cloud"></i>Google Drive</button>
+      <button type="button" role="tab" data-src="upload" aria-selected="false" style="flex:1"><i data-i="upload"></i>Tải từ máy</button>
+    </div>
+    <div data-pane="drive">
+      <label for="driveUrl">Link file hoặc folder</label>
+      <div class="row"><input id="driveUrl" placeholder="https://drive.google.com/drive/folders/…"><button class="primary" id="driveBtn">Thêm</button></div>
+      <p class="hint">Share "Bất kỳ ai có đường liên kết". Dán link folder: mọi video trong folder được thêm theo thứ tự tên file.</p>
+    </div>
+    <div data-pane="upload" hidden>
+      <label class="dropzone" id="drop" for="fileInput" style="margin-top:14px">
+        <i data-i="upload"></i><b>Kéo thả video vào đây hoặc bấm để chọn</b><span class="small">MP4/WebM/MOV, tối đa 2GB mỗi file, chọn được nhiều file</span>
+      </label>
+      <input id="fileInput" type="file" accept="video/mp4,video/webm,video/quicktime,.m4v" multiple hidden>
+      <div id="upProgress" hidden style="margin-top:12px"><div class="small muted" id="upText"></div><progress id="upBar" max="1" value="0"></progress></div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlgGuide" class="wide" aria-labelledby="hGuide">
+  <div class="dlg-head"><h2 id="hGuide">Hướng dẫn quay video demo</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-body section-body">
+    <h3>1. Chuẩn bị</h3>
+    <table><thead><tr><th>Hạng mục</th><th>Khuyến nghị</th></tr></thead><tbody>
+      <tr><td>Phần mềm quay</td><td>OBS Studio (miễn phí, mọi hệ điều hành) · Windows: <kbd>Win</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> · macOS: <kbd>⌘</kbd>+<kbd>⇧</kbd>+<kbd>5</kbd></td></tr>
+      <tr><td>Khung hình</td><td>1920×1080, 16:9, 30 fps, xuất MP4 (H.264)</td></tr>
+      <tr><td>Âm thanh</td><td>Tai nghe có mic, phòng yên tĩnh, có thuyết minh rõ ràng</td></tr>
+      <tr><td>Màn hình</td><td>Tắt thông báo, đóng tab thừa, zoom trình duyệt 110–125%, ẩn thông tin cá nhân</td></tr>
+      <tr><td>Dữ liệu</td><td>Dữ liệu mẫu giống thật (tên, giá, ảnh), tránh "test123"; đăng nhập sẵn tài khoản demo</td></tr>
+    </tbody></table>
+    <h3>2. Cách quay</h3>
+    <ul>
+      <li><b>Mỗi cảnh một video ngắn 1–3 phút</b> (danh sách cảnh ở cuối trang). Quay hỏng chỉ cần quay lại cảnh đó, hệ thống tự ghép.</li>
+      <li>Mở đầu mỗi video bằng câu: <i>"Cảnh: Đăng nhập"</i>, giúp AI nhận đúng cảnh.</li>
+      <li>Thao tác chậm, dừng 1–2 giây ở màn hình kết quả, dùng chuột chỉ vào chỗ đang nói.</li>
+      <li>Làm trọn vẹn một luồng (nhập → lưu → thấy kết quả), không cắt giữa chừng.</li>
+      <li>Nên quay thêm một lần nhập sai hoặc thiếu dữ liệu để thấy hệ thống báo lỗi.</li>
+    </ul>
+    <h3>3. Đặt tên và đưa lên</h3>
+    <ul>
+      <li>Đặt tên theo thứ tự: <code>01_gioi-thieu.mp4</code>, <code>02_kien-truc.mp4</code>, …</li>
+      <li>Cách nhanh nhất: bỏ tất cả vào <b>một folder Google Drive</b>, share "Bất kỳ ai có link", dán link folder một lần.</li>
+      <li>Hoặc tải trực tiếp từ máy (≤ 2GB mỗi file).</li>
+    </ul>
+    <h3>4. Sau khi đưa lên</h3>
+    <p>Hệ thống tự quét từng video và chấm từng cảnh. Cảnh <b>thiếu</b> hoặc <b>chưa rõ</b> có nút <b>Quay bổ sung</b>: quay riêng đoạn đó và gửi lên,
+      hệ thống tự cắt bỏ đoạn thừa, chọn đoạn tốt nhất và sắp xếp thành <b>Bản trình bày</b> cho giảng viên.</p>
+    <h3>Danh sách cảnh của dự án này</h3>
+    <div id="guideShots"></div>
+  </div>
+</dialog>
+
+<dialog id="dlgVideos" class="wide" aria-labelledby="hVideos">
+  <div class="dlg-head"><h2 id="hVideos">Quản lý video gốc</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-body" id="vlist"></div>
+</dialog>
+
+<dialog id="dlgShots" class="wide" aria-labelledby="hShots">
+  <div class="dlg-head"><h2 id="hShots">Danh sách cảnh cần quay</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-body">
+    <p class="muted small" style="margin:0 0 8px">AI dựa vào danh sách này để chấm video và ghép bản trình bày. Thứ tự ở đây là thứ tự giảng viên xem.</p>
+    <div id="shotRows"></div>
+    <button type="button" id="addShot" class="ghost" style="margin-top:8px"><i data-i="plus"></i>Thêm cảnh</button>
+  </div>
+  <div class="dlg-foot" style="justify-content:space-between">
+    <button type="button" id="aiShotsBtn" class="ghost"><i data-i="sparkles"></i>AI lập từ báo cáo</button>
+    <button type="button" id="saveShots" class="primary">Lưu</button>
+  </div>
+</dialog>
+
+<dialog id="dlgSection" class="wide" aria-labelledby="hSection">
+  <form id="sectionForm">
+    <div class="dlg-head"><h2 id="hSection">Sửa phần</h2><button type="button" class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+    <div class="dlg-body">
+      <div class="row" style="align-items:end">
+        <div style="flex:1;min-width:0"><label for="secTitle">Tiêu đề</label><input id="secTitle" required maxlength="200"></div>
+        <div style="width:170px"><label for="secKind">Loại</label><select id="secKind"></select></div>
+      </div>
+      <label for="secMd">Nội dung</label>
+      <textarea id="secMd" class="code" rows="12"></textarea>
+      <p class="hint">Markdown. Bảng: <code>| Cột 1 | Cột 2 |</code> rồi dòng <code>|---|---|</code>.</p>
+      <div class="row" style="margin-top:14px"><label for="secMer" style="margin:0;flex:1">Sơ đồ (Mermaid, không bắt buộc)</label>
+        <select id="merTpl" style="width:auto;min-height:32px;font-size:13px" aria-label="Chèn mẫu sơ đồ"><option value="">Chèn mẫu…</option></select></div>
+      <div class="mer-edit">
+        <textarea id="secMer" class="code" rows="12" spellcheck="false" placeholder="flowchart TD&#10;  A[Người dùng] --> B[API]"></textarea>
+        <div class="mer-preview"><div id="merOut" class="diagram" style="margin:0"></div></div>
+      </div>
+      <div id="merErr" class="mer-err" hidden></div>
+      <details class="mer-guide"><summary><i data-i="help"></i>Hướng dẫn viết sơ đồ Mermaid</summary>
+        <table><thead><tr><th>Cần vẽ</th><th>Dòng đầu</th><th>Cú pháp chính</th></tr></thead><tbody>
+          <tr><td>Luồng chức năng, use case</td><td><code>flowchart TD</code></td><td><code>A["Đăng nhập"] --> B{"Hợp lệ?"}</code> · <code>B -- "Có" --> C</code></td></tr>
+          <tr><td>Giao thức, API, đăng nhập</td><td><code>sequenceDiagram</code></td><td><code>Client->>API: POST /login</code> · <code>API-->>Client: 200 token</code></td></tr>
+          <tr><td>Thiết kế lớp (OOP)</td><td><code>classDiagram</code></td><td><code>class User { +login() }</code> · <code>User "1" --> "*" Order</code></td></tr>
+          <tr><td>Cơ sở dữ liệu</td><td><code>erDiagram</code></td><td><code>USER ||--o{ ORDER : "đặt"</code></td></tr>
+          <tr><td>Trạng thái</td><td><code>stateDiagram-v2</code></td><td><code>[*] --> Moi</code> · <code>Moi --> DaThanhToan</code></td></tr>
+          <tr><td>Kế hoạch, tiến độ</td><td><code>gantt</code></td><td><code>dateFormat YYYY-MM-DD</code> · <code>Thiết kế :a1, 2026-09-01, 14d</code></td></tr>
+          <tr><td>Tỉ lệ, thống kê</td><td><code>pie</code> / <code>xychart-beta</code></td><td><code>"Đạt" : 42</code> · <code>bar [120, 95, 80]</code></td></tr>
+        </tbody></table>
+        <p><b>Lỗi hay gặp:</b></p>
+        <ul>
+          <li>Nhãn có dấu cách, dấu ngoặc <code>()</code>, dấu <code>:</code>, <code>/</code> → đặt trong ngoặc kép: <code>A["Gọi API (REST)"]</code>.</li>
+          <li>Tên khối (id) chỉ dùng chữ không dấu, số, gạch dưới: <code>dang_nhap["Đăng nhập"]</code>; không dùng từ <code>end</code> làm id.</li>
+          <li>Mỗi lệnh một dòng, thụt lề bằng dấu cách; không bọc mã trong <code>```</code>.</li>
+          <li>Mũi tên: <code>--></code> (flowchart), <code>->></code> và <code>-->></code> (sequence).</li>
+        </ul>
+        <p>Khung bên phải vẽ lại ngay khi bạn gõ. Có lỗi thì bấm <b>AI sửa lỗi</b>, xem lại kết quả rồi Lưu. Cần thử nhanh hơn: <a href="https://mermaid.live" target="_blank" rel="noopener">mermaid.live</a>.</p>
+      </details>
+    </div>
+    <div class="dlg-foot"><button type="button" data-close>Huỷ</button><button class="primary">Lưu</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgAsk" aria-labelledby="hAsk">
+  <form id="askForm" class="ask">
+    <div class="dlg-head"><h2 id="hAsk">Bổ sung thông tin</h2><span class="muted small" id="askStep"></span>
+      <button type="button" class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+    <div class="dlg-body">
+      <div class="ask-progress"><div id="askBar"></div></div>
+      <span class="kind" id="askKind"></span>
+      <p class="ask-q" id="askQ"></p>
+      <textarea id="askA" required aria-labelledby="askQ" placeholder="Trả lời ngắn gọn, cụ thể. Có thể dùng bảng Markdown."></textarea>
+      <p class="hint">Câu trả lời được thêm vào đúng phần của báo cáo. AI dùng nó để vẽ thêm sơ đồ và bảng.</p>
+    </div>
+    <div class="dlg-foot"><button type="button" id="askSkip" class="ghost">Để sau</button><button class="primary">Lưu &amp; tiếp</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgName" aria-labelledby="hName">
+  <form method="dialog" id="nameForm">
+    <div class="dlg-head"><h2 id="hName">Tên của thầy/cô</h2></div>
+    <div class="dlg-body"><label for="whoName">Tên hiển thị trên góp ý</label><input id="whoName" required maxlength="100" placeholder="ThS. Nguyễn Văn A"></div>
+    <div class="dlg-foot"><button class="primary">Lưu</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgTodo" aria-labelledby="hTodo">
+  <div class="dlg-head"><h2 id="hTodo">Việc cần làm từ góp ý</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-body"><ol class="todo" id="todo"></ol></div>
+</dialog>
+
+<dialog id="dlgSummary" class="wide" aria-labelledby="hSummary">
+  <div class="dlg-head"><h2 id="hSummary">Tóm tắt video</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-body section-body" id="summaryBody"></div>
+</dialog>
+
+<dialog id="dlgRubric" class="wide" aria-labelledby="hRubric">
+  <div class="dlg-head"><h2 id="hRubric">Chấm điểm</h2><span class="muted small" id="rubricSaved"></span>
+    <button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-body">
+    <div class="row" style="margin-bottom:10px"><p class="muted small spacer" style="margin:0"><b>Thang điểm UK (0–100)</b>. Tự lưu nháp khi bạn nhập; sinh viên chỉ thấy sau khi bạn bấm <b>Gửi cho sinh viên</b>.</p>
+      <button type="button" id="aiRubricBtn" class="ghost"><i data-i="sparkles"></i>AI gợi ý điểm</button></div>
+    <table class="rubric"><thead><tr><th>Tiêu chí</th><th style="width:70px">Trọng số</th><th style="width:96px">Điểm /100</th><th>Nhận xét</th></tr></thead><tbody id="rubricRows"></tbody>
+      <tfoot><tr><td colspan="2"><b>Tổng (có trọng số)</b></td><td><b id="rubricTotal" class="total">—</b></td><td><span id="rubricBand" class="badge accent" hidden></span></td></tr></tfoot></table>
+    <details class="mer-guide"><summary><i data-i="help"></i>Thang điểm UK — mô tả các mức</summary><table id="bandTable"></table></details>
+    <label for="rubricOverall">Nhận xét chung</label>
+    <textarea id="rubricOverall" rows="4" placeholder="Điểm mạnh, điểm cần cải thiện, kết luận…"></textarea>
+  </div>
+  <div class="dlg-foot"><span class="hint spacer" id="rubricPub"></span><button data-close>Đóng</button><button class="primary" id="publishBtn"><i data-i="send"></i>Gửi cho sinh viên</button></div>
+</dialog>
+
+<dialog id="dlgLecGuide" class="wide" aria-labelledby="hLecGuide">
+  <div class="dlg-head"><h2 id="hLecGuide">Review đồ án trong 4 bước</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-body section-body">
+    <ol class="guide-steps">
+      <li><b>Đọc tóm tắt AI</b> ở đầu trang: đồ án làm gì, công nghệ, điểm mạnh, rủi ro và câu hỏi phản biện gợi ý. Bấm <b>Hỏi</b> để chuyển câu hỏi thành góp ý.</li>
+      <li><b>Xem Bản trình bày</b>: các đoạn video đã được tự cắt và xếp theo yêu cầu. Muốn xem toàn bộ thì chọn <b>Video gốc</b>.</li>
+      <li><b>Góp ý đúng chỗ</b>: dừng video (góp ý ghim vào giây đó) hoặc bôi đen một đoạn báo cáo, rồi viết. Bấm <b>Gợi ý</b> để AI soạn hoặc viết lại cho rõ.</li>
+      <li><b>Chấm điểm</b> (nút góc phải trên): AI gợi ý điểm kèm lý do cho từng tiêu chí, thầy/cô chỉnh rồi <b>Gửi cho sinh viên</b>.</li>
+    </ol>
+    <h3>Phím tắt</h3>
+    <table><tbody>
+      <tr><td><kbd>Space</kbd></td><td>Phát / dừng video</td><td><kbd>←</kbd> <kbd>→</kbd></td><td>Lùi / tới 5 giây</td></tr>
+      <tr><td><kbd>J</kbd> <kbd>K</kbd></td><td>Đoạn trước / đoạn sau</td><td><kbd>C</kbd></td><td>Viết góp ý (tự dừng video)</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Gửi góp ý</td><td><kbd>?</kbd></td><td>Mở hướng dẫn này</td></tr>
+    </tbody></table>
+    <p class="muted">Không cần tài khoản. Trình duyệt này ghi nhớ thầy/cô để sửa, xoá góp ý và phiếu chấm của mình; nên dùng cùng một trình duyệt khi quay lại.</p>
+  </div>
+  <div class="dlg-foot"><button class="primary" data-close>Bắt đầu review</button></div>
+</dialog>
+
+<dialog id="dlgEdit" aria-labelledby="hEdit">
+  <form id="editForm"><div class="dlg-head"><h2 id="hEdit">Sửa góp ý</h2></div>
+    <div class="dlg-body"><textarea id="editText" rows="5" maxlength="5000" required aria-labelledby="hEdit"></textarea></div>
+    <div class="dlg-foot"><button type="button" data-close>Huỷ</button><button class="primary">Lưu</button></div></form>
+</dialog>
+
+<input id="reportInput" type="file" accept=".pdf,.docx,.md,.txt" hidden>
+<script src="/ui.js"></script>
+<script src="/project.js"></script>
+</body>
+</html>

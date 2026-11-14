@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><i data-i="cap"></i>Demo Review</a>
+  <span class="spacer"></span>
+  <button id="account" class="ghost" hidden aria-haspopup="menu"><i data-i="user"></i><span id="who"></span></button>
+</header>
+
+<!-- Chưa đăng nhập -->
+<div id="auth" class="auth-wrap" hidden>
+  <div class="auth card pad">
+    <h1>Nộp đồ án, nhận góp ý đúng chỗ</h1>
+    <p class="muted small" style="margin:0">Đăng video demo và báo cáo, AI tự tạo bảng và sơ đồ, rồi gửi link cho giảng viên.</p>
+    <div class="seg" role="tablist">
+      <button type="button" role="tab" aria-selected="true" data-tab="login">Đăng nhập</button>
+      <button type="button" role="tab" aria-selected="false" data-tab="register">Tạo tài khoản</button>
+    </div>
+    <form id="login">
+      <label for="lMssv">Mã số sinh viên</label>
+      <input id="lMssv" required autocomplete="username" autocapitalize="characters" placeholder="VD: 2151012345">
+      <button class="primary">Đăng nhập</button>
+    </form>
+    <form id="register" hidden>
+      <label for="rName">Họ và tên</label><input id="rName" required maxlength="100" autocomplete="name">
+      <label for="rMssv">Mã số sinh viên</label><input id="rMssv" required maxlength="20" autocapitalize="characters">
+      <label for="rPhone">Số điện thoại</label><input id="rPhone" required type="tel" autocomplete="tel" inputmode="tel">
+      <button class="primary">Tạo tài khoản</button>
+    </form>
+    <p class="hint" style="margin-top:16px">Giảng viên không cần tài khoản: mở link review mà sinh viên gửi.</p>
+  </div>
+</div>
+
+<!-- Đã đăng nhập -->
+<main id="dash" class="wrap" hidden>
+  <div class="page-head">
+    <h1>Dự án của tôi</h1>
+    <button class="primary" id="newBtn"><i data-i="plus"></i>Dự án mới</button>
+  </div>
+  <div id="aiBanner" class="statusbar warn" hidden style="margin-bottom:16px"></div>
+  <div class="grid" id="projects"></div>
+</main>
+
+<dialog id="dlgAi" class="wide" aria-labelledby="hAi">
+  <div class="dlg-head"><h2 id="hAi">Cài đặt AI cá nhân</h2><button class="icon-btn" data-close aria-label="Đóng"><i data-i="x"></i></button></div>
+  <div class="dlg-body section-body">
+    <p>Mỗi sinh viên dùng <b>khoá AI miễn phí của riêng mình</b>, nên không bị hết lượt vì người khác. Khoá chỉ dùng cho dự án của bạn
+      (kể cả khi giảng viên dùng AI để review bài bạn) và không bao giờ hiển thị lại, chỉ hiện 4 ký tự cuối.</p>
+    <div id="usage"></div>
+
+    <h3>1. Google Gemini <span class="badge warn">Bắt buộc</span></h3>
+    <p class="muted small" style="margin-top:0">Chỉ Gemini xem được video và đọc được PDF/Word, nên phải có khoá này.</p>
+    <ol>
+      <li>Mở <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> và đăng nhập bằng <b>Gmail cá nhân</b> (email trường đôi khi bị chặn).</li>
+      <li>Lần đầu: đồng ý điều khoản. Bấm <b>Create API key</b>, chọn project có sẵn hoặc để Google tạo mới.</li>
+      <li>Bấm biểu tượng sao chép cạnh khoá (thường bắt đầu bằng <code>AIza</code>), dán vào ô dưới rồi bấm <b>Lưu</b>.</li>
+    </ol>
+    <div class="row"><input id="kGemini" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…" aria-label="Khoá Gemini">
+      <button class="primary" id="saveGemini">Lưu</button><button class="ghost" id="delGemini" hidden>Xoá</button></div>
+    <p class="hint" id="sGemini"></p>
+
+    <h3>2. Nhà cung cấp bổ sung <span class="badge">Tuỳ chọn, nên có 1–2</span></h3>
+    <p class="muted small" style="margin-top:0">Dùng cho việc chỉ có chữ: tóm tắt, gợi ý góp ý, rubric, sửa sơ đồ… Như vậy Gemini để dành cho video và PDF.
+      Hệ thống thử theo thứ tự từ trên xuống, nhà cung cấp nào lỗi hoặc hết lượt thì tự chuyển cái kế tiếp, cuối cùng là Gemini.</p>
+    <div id="provList" class="provlist"></div>
+    <div class="card pad" style="margin-top:10px">
+      <div class="row" style="align-items:end;flex-wrap:wrap">
+        <div style="width:170px"><label for="pId" style="margin-top:0">Nhà cung cấp</label><select id="pId"></select></div>
+        <div style="flex:1;min-width:180px"><label for="pModel" style="margin-top:0">Model</label><input id="pModel" spellcheck="false"></div>
+      </div>
+      <label for="pKey">Khoá API</label>
+      <div class="row"><input id="pKey" type="password" autocomplete="off" spellcheck="false" placeholder="Dán khoá vào đây">
+        <button class="primary" id="addProv">Kiểm tra &amp; thêm</button></div>
+      <p class="hint">Khi thêm, hệ thống gửi một lệnh rất nhỏ (khoảng 10 token) để chắc chắn khoá và tên model đúng.</p>
+      <div id="provGuide" class="prov-guide"></div>
+    </div>
+
+    <h3>Lưu ý</h3>
+    <table><tbody>
+      <tr><td>Chi phí</td><td>Gemini, Groq, GitHub Models, Mistral, OpenRouter có gói miễn phí, không cần thẻ. <b>Claude trả phí</b> theo token. Hết lượt trong ngày thì hệ thống tự chuyển nhà cung cấp kế tiếp.</td></tr>
+      <tr><td>Tiết kiệm lượt</td><td>Hệ thống tự lưu kết quả AI và chỉ gọi lại khi bài thay đổi. Video được gửi ở độ phân giải thấp, và khi quét video chỉ gửi dàn ý báo cáo. Bạn chỉ cần tránh bấm quét lại khi chưa đổi gì.</td></tr>
+      <tr><td>Dữ liệu</td><td>Ở gói miễn phí, nhà cung cấp có thể dùng nội dung gửi lên để cải thiện sản phẩm. Không đưa mật khẩu hay dữ liệu cá nhân thật vào báo cáo/video.</td></tr>
+      <tr><td>Bảo mật</td><td>Không chia sẻ khoá. Lộ khoá thì xoá nó ở trang của nhà cung cấp, tạo khoá mới rồi thêm lại ở đây.</td></tr>
+    </tbody></table>
+  </div>
+  <div class="dlg-foot"><button class="primary" data-close>Xong</button></div>
+</dialog>
+
+<dialog id="dlgNew" aria-labelledby="dlgNewTitle">
+  <form method="dialog" id="createForm">
+    <div class="dlg-head"><h2 id="dlgNewTitle">Dự án mới</h2></div>
+    <div class="dlg-body">
+      <label for="title">Tên dự án</label>
+      <input id="title" required maxlength="200" placeholder="VD: Hugo Music – Ứng dụng nghe nhạc">
+      <p class="hint">Bước tiếp theo: thêm video demo và báo cáo.</p>
+    </div>
+    <div class="dlg-foot"><button type="button" value="cancel" onclick="this.closest('dialog').close()">Huỷ</button><button class="primary">Tạo</button></div>
+  </form>
+</dialog>
+
+<script src="/ui.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const post = (url, data) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) })
+  .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; });
+const guard = (fn) => async (e) => { e.preventDefault(); try { await fn(e); } catch (err) { toast(err.message, 'err'); } };
+let me = null;
+
+async function init() {
+  const r = await fetch('/api/me');
+  me = r.ok ? await r.json() : null;
+  $('#auth').hidden = !!me;
+  $('#dash').hidden = !me;
+  $('#account').hidden = !me;
+  if (me) { $('#who').textContent = me.name; loadProjects(); renderAiState(); if (location.hash === '#ai') openAi(); } else $('#lMssv').focus();
+}
+
+// ---- Cài đặt AI cá nhân ----
+// Hướng dẫn lấy khoá cho từng nhà cung cấp.
+const GUIDES = {
+  groq: { title: 'Groq — nhanh nhất, khoảng 1.000 lượt/ngày miễn phí', steps: [
+    'Mở <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>, đăng nhập bằng Google hoặc GitHub.',
+    'Bấm <b>Create API Key</b>, đặt tên (VD: <code>demo-review</code>), rồi bấm <b>Submit</b>.',
+    'Sao chép khoá <b>ngay</b> vì Groq chỉ hiện một lần. Khoá bắt đầu bằng <code>gsk_</code>.',
+    'Model gợi ý: <code>openai/gpt-oss-120b</code> (tốt) hoặc <code>openai/gpt-oss-20b</code> (nhanh hơn). Danh sách: <a href="https://console.groq.com/docs/models" target="_blank" rel="noopener">console.groq.com/docs/models</a>.'] },
+  github: { title: 'GitHub Models — dùng tài khoản GitHub sẵn có', steps: [
+    'Mở <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com › Settings › Fine-grained tokens › Generate new token</a>.',
+    'Đặt tên, chọn thời hạn (VD: 90 ngày). Ở <b>Permissions</b> → <b>Account permissions</b> → <b>Models</b>, chọn <b>Read-only</b>.',
+    'Bấm <b>Generate token</b> và sao chép (bắt đầu bằng <code>github_pat_</code>).',
+    'Model gợi ý: <code>openai/gpt-4.1-mini</code>. Danh sách: <a href="https://github.com/marketplace/models" target="_blank" rel="noopener">github.com/marketplace/models</a>. Giới hạn miễn phí tính theo ngày, phù hợp làm dự phòng.'] },
+  mistral: { title: 'Mistral — gói miễn phí "Experiment"', steps: [
+    'Mở <a href="https://console.mistral.ai" target="_blank" rel="noopener">console.mistral.ai</a>, đăng ký và chọn gói <b>Experiment</b> (miễn phí; cần xác minh số điện thoại).',
+    'Vào <a href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener">API Keys</a> → <b>Create new key</b>, rồi sao chép khoá.',
+    'Model gợi ý: <code>mistral-small-latest</code>. Lưu ý: gói miễn phí có thể dùng dữ liệu để huấn luyện.'] },
+  claude: { title: 'Claude (Anthropic) — chất lượng cao, TRẢ PHÍ theo token (không có gói miễn phí)', steps: [
+    'Mở <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> (Claude Platform), đăng ký bằng email.',
+    'Vào <b>Billing</b> → nạp credit (tối thiểu 5$). Không có credit thì khoá không gọi được.',
+    'Vào <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">API Keys</a> → <b>Create Key</b>, đặt tên rồi sao chép khoá (bắt đầu bằng <code>sk-ant-</code>; chỉ hiện một lần).',
+    'Model mặc định <code>claude-opus-5-5</code> (mạnh nhất, 4$/20$ cho 1 triệu token vào/ra). Muốn tiết kiệm: <code>claude-sonnet-5-5</code> (2$/10$) hoặc <code>claude-haiku-5-5</code> (0,1$/0,5$, rẻ nhất).',
+    'Nên đặt Claude <b>sau</b> các nhà cung cấp miễn phí trong danh sách, để chỉ dùng khi chúng hết lượt. Đặt giới hạn chi tiêu ở <b>Settings › Limits</b> để tránh phát sinh ngoài ý muốn.'] },
+  openrouter: { title: 'OpenRouter — nhiều model miễn phí, giới hạn ít lượt', steps: [
+    'Mở <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>, đăng nhập và bấm <b>Create Key</b>. Khoá bắt đầu bằng <code>sk-or-</code>.',
+    'Chỉ dùng model có đuôi <code>:free</code>. Tìm ở <a href="https://openrouter.ai/models?max_price=0" target="_blank" rel="noopener">openrouter.ai/models (lọc Free)</a>, sao chép tên model dán vào ô Model.',
+    'Giới hạn khoảng 50 lượt/ngày (khoảng 1.000 nếu từng nạp 10$), nên dùng làm dự phòng cuối cùng.'] },
+};
+function renderAiState() {
+  const has = !!me.gemini;
+  $('#aiBanner').hidden = has;
+  $('#aiBanner').innerHTML = `${ic('sparkles')}<span class="spacer">Chưa cài đặt AI cá nhân${me.serverGemini ? ': đang dùng AI chung của hệ thống (dễ hết lượt khi đông người)' : ': AI chưa đọc được PDF và video'}.</span>
+    <button class="primary" id="aiSetup">Cài đặt (khoảng 3 phút)</button>`;
+  if (!has) $('#aiSetup').onclick = openAi;
+  $('#sGemini').textContent = me.gemini ? `Đang dùng khoá ${me.gemini}` : me.serverGemini ? 'Chưa có: đang dùng khoá chung của hệ thống.' : 'Chưa có khoá.';
+  $('#delGemini').hidden = !me.gemini;
+  // Lượt dùng hôm nay
+  const total = me.usage.reduce((a, u) => a + u.tokens, 0);
+  $('#usage').innerHTML = me.usage.length ? `<div class="statusbar" style="margin-bottom:8px">${ic('clock')}<span>Hôm nay: <b>${me.usage.reduce((a, u) => a + u.calls, 0)}</b> lượt,
+    khoảng <b>${total.toLocaleString('vi-VN')}</b> token (${me.usage.map((u) => `${u.provider}: ${u.calls}`).join(' · ')})</span></div>` : '';
+  // Danh sách nhà cung cấp bổ sung
+  $('#provList').innerHTML = me.providers.length ? '' : '<p class="muted small">Chưa có. Thêm ít nhất Groq hoặc GitHub Models để tiết kiệm lượt Gemini.</p>';
+  me.providers.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'provrow';
+    row.innerHTML = `<span class="n">${i + 1}</span><span><b></b><small></small></span><span class="acts"></span>`;
+    row.querySelector('b').textContent = p.name;
+    row.querySelector('small').textContent = `${p.model || 'model mặc định'} · khoá ${p.key}`;
+    const call = (method, body) => async () => {
+      try { await api(`/api/me/providers/${i}`, method, body); me = await (await fetch('/api/me')).json(); renderAiState(); } catch (e) { toast(e.message, 'err'); }
+    };
+    const up = iconBtn('up', 'Ưu tiên cao hơn', call('PATCH', { move: -1 }), 'sm'), down = iconBtn('down', 'Ưu tiên thấp hơn', call('PATCH', { move: 1 }), 'sm');
+    up.disabled = i === 0; down.disabled = i === me.providers.length - 1;
+    row.querySelector('.acts').append(up, down, iconBtn('trash', 'Xoá nhà cung cấp', async () => {
+      if (await confirmBox(`Xoá ${p.name}?`, 'Có thể thêm lại bất cứ lúc nào.', { ok: 'Xoá', danger: true })) { await call('DELETE')(); toast('Đã xoá'); }
+    }, 'sm'));
+    $('#provList').append(row);
+  });
+}
+const api = (url, method, data) => fetch(url, { method, headers: { 'content-type': 'application/json' }, body: data && JSON.stringify(data) })
+  .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; });
+function showGuide() {
+  const g = GUIDES[$('#pId').value], preset = me.presets.find((x) => x.id === $('#pId').value);
+  $('#pModel').value = preset.model;
+  $('#provGuide').innerHTML = `<b>${g.title}</b><ol>${g.steps.map((x) => `<li>${x}</li>`).join('')}</ol>`;
+}
+function openAi() {
+  $('#kGemini').value = ''; $('#pKey').value = '';
+  $('#pId').replaceChildren(...me.presets.map((p) => new Option(p.name, p.id)));
+  showGuide();
+  renderAiState();
+  $('#dlgAi').showModal();
+}
+$('#pId').onchange = showGuide;
+$('#saveGemini').onclick = async (e) => {
+  const v = $('#kGemini').value.trim();
+  if (!v) return toast('Hãy dán khoá vào ô trước', 'err');
+  try {
+    await busy(e.currentTarget, 'Đang kiểm tra…', () => api('/api/me/ai-key', 'PUT', { gemini: v }));
+    $('#kGemini').value = ''; me = await (await fetch('/api/me')).json(); renderAiState(); toast('Đã lưu khoá Gemini — khoá hợp lệ');
+  } catch (err) { toast(err.message, 'err'); }
+};
+$('#delGemini').onclick = async () => {
+  if (!(await confirmBox('Xoá khoá Gemini?', 'AI sẽ không đọc được PDF/video của bạn cho tới khi thêm lại.', { ok: 'Xoá', danger: true }))) return;
+  try { await api('/api/me/ai-key', 'PUT', { gemini: '' }); me = await (await fetch('/api/me')).json(); renderAiState(); toast('Đã xoá khoá'); } catch (e) { toast(e.message, 'err'); }
+};
+$('#addProv').onclick = async (e) => {
+  const key = $('#pKey').value.trim();
+  if (!key) return toast('Hãy dán khoá vào ô trước', 'err');
+  try {
+    await busy(e.currentTarget, 'Đang kiểm tra…', () => api('/api/me/providers', 'POST', { id: $('#pId').value, key, model: $('#pModel').value.trim() }));
+    $('#pKey').value = ''; me = await (await fetch('/api/me')).json(); renderAiState(); toast('Đã thêm — khoá và model hợp lệ');
+  } catch (err) { toast(err.message, 'err'); }
+};
+document.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) e.target.closest('dialog').close(); });
+
+// Trạng thái quan trọng nhất của dự án → 1-2 badge, không liệt kê hết.
+function badges(p) {
+  const out = [];
+  if (p.open) out.push(['warn', 'message', `${p.open} góp ý chưa sửa`]);
+  if (p.missing) out.push(['warn', 'alert', `Thiếu ${p.missing} thông tin`]);
+  if (!p.videos && !p.hasReport) out.push(['', 'clock', 'Chưa có nội dung']);
+  else if (!out.length) out.push(['ok', 'check', p.comments ? 'Đã sửa hết góp ý' : 'Sẵn sàng gửi giảng viên']);
+  return out.map(([c, i, t]) => `<span class="badge ${c}">${ic(i)}<span>${t}</span></span>`).join('');
+}
+
+async function loadProjects() {
+  const list = await (await fetch('/api/projects')).json();
+  const box = $('#projects');
+  if (!list.length) {
+    box.innerHTML = `<div class="card empty" style="grid-column:1/-1">${ic('folder')}
+      <h3>Chưa có dự án nào</h3><p>Tạo dự án, thêm video demo và báo cáo. AI sẽ lo phần bảng và sơ đồ.</p>
+      <button class="primary" id="firstNew">${ic('plus')}Tạo dự án đầu tiên</button></div>`;
+    $('#firstNew').onclick = openNew;
+    return;
+  }
+  box.replaceChildren(...list.map((p) => {
+    const a = document.createElement('a');
+    a.className = 'card pcard';
+    a.href = '/project.html?id=' + encodeURIComponent(p.id);
+    a.innerHTML = `<h3></h3><div class="badges">${badges(p)}</div>
+      <div class="meta"><span>${ic('video')}${p.videos}</span><span>${ic('message')}${p.comments}</span><span>${ic('clock')}<time></time></span></div>`;
+    a.querySelector('h3').textContent = p.title;
+    a.querySelector('time').textContent = new Date(p.created).toLocaleDateString('vi-VN');
+    return a;
+  }));
+}
+
+document.querySelectorAll('[data-tab]').forEach((t) => t.onclick = () => {
+  document.querySelectorAll('[data-tab]').forEach((x) => x.setAttribute('aria-selected', x === t));
+  $('#login').hidden = t.dataset.tab !== 'login';
+  $('#register').hidden = t.dataset.tab !== 'register';
+  (t.dataset.tab === 'login' ? $('#lMssv') : $('#rName')).focus();
+});
+$('#login').onsubmit = guard(async () => { await post('/api/login', { mssv: $('#lMssv').value }); init(); });
+$('#register').onsubmit = guard(async () => {
+  await post('/api/register', { name: $('#rName').value, mssv: $('#rMssv').value, phone: $('#rPhone').value });
+  toast('Đã tạo tài khoản');
+  init();
+});
+$('#account').onclick = (e) => openMenu(e.currentTarget, [
+  { icon: 'user', label: me.name, hint: 'MSSV ' + me.mssv, onClick() {} },
+  { icon: 'sparkles', label: 'Cài đặt AI cá nhân', hint: me.gemini ? `Gemini ${me.gemini} · ${me.providers.length} nhà cung cấp bổ sung` : 'Chưa cài — bấm để xem hướng dẫn', onClick: openAi },
+  '-',
+  { icon: 'logout', label: 'Đăng xuất', onClick: async () => { await post('/api/logout', {}); init(); } },
+]);
+function openNew() { $('#title').value = ''; $('#dlgNew').showModal(); }
+$('#newBtn').onclick = openNew;
+$('#createForm').onsubmit = guard(async () => {
+  const { id } = await post('/api/projects', { title: $('#title').value });
+  location.href = '/project.html?id=' + id;
+});
+init();
+</script>
+</body>
+</html>
