@@ -204,5 +204,5 @@ Caddy gửi kèm `X-Forwarded-Proto: https` nên cookie đăng nhập tự bật
 
 ## Chưa làm (cố ý)
 
-- Đăng nhập chỉ bằng MSSV (theo yêu cầu), nên ai biết MSSV là vào được tài khoản đó. Muốn chặt hơn: hỏi thêm SĐT khi đăng nhập, hoặc gửi OTP.
+- Đăng nhập chỉ bằng MSSV là quyết định thiết kế: đồ án cần đơn giản, không dùng mật khẩu hay OTP.
 - Realtime: bình luận đang tự cập nhật mỗi 10 giây.

@@ -790,7 +790,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   // --- Tài khoản sinh viên ---
-  // ponytail: đăng nhập chỉ bằng MSSV theo yêu cầu — ai biết MSSV là vào được. Muốn chặt hơn: hỏi thêm SĐT khi đăng nhập.
+  // Đăng nhập chỉ bằng MSSV — quyết định thiết kế (đơn giản cho sinh viên), không mật khẩu/OTP.
   if (p[1] === 'register' && m === 'POST') {
     const s = validateStudent(await readJson(req));
     if (typeof s === 'string') throw new HttpError(400, s);
