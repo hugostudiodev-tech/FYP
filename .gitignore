@@ -3,3 +3,4 @@ uploads/
 data.db*
 .env
 .DS_Store
+.npm/

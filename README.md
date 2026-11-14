@@ -132,7 +132,14 @@ Vào trang quản lý DNS của `hugowishpax.studio` và thêm bản ghi:
 - Dùng **Cloudflare**: để bản ghi này ở chế độ **DNS only (mây xám)**. Bật proxy (mây cam) thì gói miễn phí chặn upload trên 100 MB và cắt kết nối sau 100 giây, nên tải video sẽ lỗi.
 - Kiểm tra: `dig +short fyp.hugowishpax.studio` phải trả về đúng IP VPS (thường mất vài phút).
 
-### 3. Cài đặt trên VPS (một lần)
+### 3. Cài đặt trên VPS
+
+**Cách nhanh (khuyên dùng):** SSH vào VPS bằng root và chạy một lệnh. Lệnh này tự cài mọi thứ ở dưới, và chạy lại lần nữa là cập nhật lên code mới:
+```bash
+curl -fsSL https://raw.githubusercontent.com/hugostudiodev-tech/FYP/main/deploy/setup.sh | bash
+```
+
+**Cách làm tay** (giống hệt những gì script làm):
 ```bash
 ssh root@IP_VPS
 
